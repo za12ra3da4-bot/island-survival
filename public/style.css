@@ -453,3 +453,30 @@ h3 { font-family: 'Black Han Sans', 'Jua', sans-serif; font-weight: normal; font
 @media (max-width: 700px) {
   .lobby-body { grid-template-columns: 1fr; }
 }
+
+/* ── 마감 품질 ────────────────────────────────── */
+#menu { background: radial-gradient(ellipse at 50% 45%, transparent 40%, rgba(20, 12, 4, 0.5)); }
+.card {
+  background: linear-gradient(180deg, #fffdf6 0%, #fff3d9 100%);
+  box-shadow: 0 8px 0 var(--ink), inset 0 3px 0 rgba(255, 255, 255, 0.95), inset 0 -8px 0 rgba(190, 150, 90, 0.12), 0 26px 60px rgba(20, 10, 0, 0.4);
+}
+.btn { background: linear-gradient(180deg, #ffffff 0%, #f1e4c8 100%); box-shadow: 0 4px 0 var(--ink), inset 0 2px 0 #fff; }
+.btn:hover { box-shadow: 0 5px 0 var(--ink), inset 0 2px 0 #fff; filter: brightness(1.04); }
+.btn.green { background: linear-gradient(180deg, #8ae884 0%, #43ad48 100%); box-shadow: 0 4px 0 var(--ink), inset 0 3px 0 rgba(255, 255, 255, 0.5), inset 0 -4px 0 rgba(0, 60, 0, 0.2); }
+.btn.green:hover { background: linear-gradient(180deg, #9af394 0%, #4dbb52 100%); }
+.btn.ghost { background: linear-gradient(180deg, #f5e7c9 0%, #e0c99b 100%); }
+.btn.big.green { text-shadow: 0 2px 0 #2a6e27, 0 0 12px rgba(255, 255, 255, 0.25); }
+.logo-top, .logo-bottom { filter: drop-shadow(0 14px 18px rgba(0, 0, 0, 0.35)); }
+.seg button.on, .tabs button.on { background: linear-gradient(180deg, #ffe27a, #ffc21f); }
+.slot { background: linear-gradient(180deg, rgba(255, 253, 244, 0.96), rgba(234, 218, 184, 0.94)); box-shadow: 0 4px 0 var(--ink), inset 0 2px 0 #fff; }
+.slot.on { background: linear-gradient(180deg, #ffe685, #ffbb14); box-shadow: 0 4px 0 var(--ink), inset 0 2px 0 rgba(255, 255, 255, 0.8), 0 0 20px rgba(255, 196, 40, 0.75); }
+.slot img, .ic img, .rc-icon, .pw img { filter: drop-shadow(0 2px 0 rgba(43, 29, 20, 0.25)); }
+.bar .track { background: linear-gradient(180deg, rgba(22, 13, 6, 0.9), rgba(62, 42, 26, 0.85)); box-shadow: 0 3px 0 rgba(0, 0, 0, 0.25); }
+.bar .track i::after { content: ''; position: absolute; left: 8px; right: 8px; top: 3px; height: 26%; border-radius: 999px; background: rgba(255, 255, 255, 0.38); }
+#dayBox, #coinBox, #prompt { background: linear-gradient(180deg, #fffdf6, #f2e1ba); }
+#minimap { box-shadow: 0 5px 0 var(--ink), 0 0 0 3px #fff8e8 inset, 0 10px 24px rgba(0, 0, 0, 0.3); }
+.rc { transition: transform 0.12s, box-shadow 0.12s; }
+.rc.can { background: linear-gradient(180deg, #ffffff, #fff6e2); }
+.rc.can:hover { transform: translateY(-2px); box-shadow: 0 5px 0 var(--ink); }
+#notice h2 { filter: drop-shadow(0 10px 14px rgba(0, 0, 0, 0.35)); }
+.fr, .tm, #toast { backdrop-filter: blur(4px); }

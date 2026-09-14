@@ -295,8 +295,9 @@ export class LocalPlayer {
     if (id === 'fist') return;
     const I = ITEMS[id], item = buildItem(id);
     if (I.cat === 'tool' && I.kind !== 'bow') {
-      item.rotation.set(-0.55, 0.35, -0.3);
-      item.position.set(0, -0.05, 0);
+      item.rotation.set(0.55, 0.25, -0.12);
+      item.position.set(0, -0.06, 0.04);
+      item.scale.setScalar(0.72);
     } else if (I.kind === 'bow') {
       item.rotation.set(0, -0.2, 0.15);
       item.scale.setScalar(0.9);

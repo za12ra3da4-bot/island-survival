@@ -10,6 +10,12 @@ const files = [
   ['node_modules/three/examples/jsm/utils/BufferGeometryUtils.js', 'public/vendor/three/addons/utils/BufferGeometryUtils.js'],
   ['node_modules/socket.io/client-dist/socket.io.esm.min.js', 'public/vendor/socket.io.esm.min.js'],
 ];
+const J = 'node_modules/three/examples/jsm';
+for (const [dir, names] of Object.entries({
+  postprocessing: ['EffectComposer', 'RenderPass', 'ShaderPass', 'MaskPass', 'Pass', 'OutputPass', 'UnrealBloomPass', 'GTAOPass'],
+  shaders: ['CopyShader', 'OutputShader', 'LuminosityHighPassShader', 'GTAOShader', 'PoissonDenoiseShader'],
+  math: ['SimplexNoise'],
+})) for (const n of names) files.push([`${J}/${dir}/${n}.js`, `public/vendor/three/addons/${dir}/${n}.js`]);
 for (const [from, to] of files) {
   const src = path.join(root, from);
   if (!existsSync(src)) { console.warn('없음:', from); continue; }

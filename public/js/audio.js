@@ -1,4 +1,5 @@
 // 효과음 — WebAudio 실시간 합성 (멀수록 작고 좌우로 들린다)
+const UI_SOUNDS = new Set(['click', 'err', 'pickup', 'coin', 'craft', 'common', 'rare', 'legendary']);
 export class Sound {
   constructor() {
     this.ctx = null;
@@ -21,6 +22,17 @@ export class Sound {
     comp.threshold.value = -12;
     comp.ratio.value = 4;
     this.master.connect(comp).connect(ctx.destination);
+    // 공간감 잔향
+    const irLen = Math.floor(ctx.sampleRate * 1.6), ir = ctx.createBuffer(2, irLen, ctx.sampleRate);
+    for (let ch = 0; ch < 2; ch++) {
+      const d = ir.getChannelData(ch);
+      for (let i = 0; i < irLen; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / irLen, 3.2);
+    }
+    this.verb = ctx.createConvolver();
+    this.verb.buffer = ir;
+    const wet = ctx.createGain();
+    wet.gain.value = 0.28;
+    this.verb.connect(wet).connect(this.master);
     const len = ctx.sampleRate * 2;
     this.noise = ctx.createBuffer(1, len, ctx.sampleRate);
     const d = this.noise.getChannelData(0);
@@ -43,6 +55,9 @@ export class Sound {
     if (!pos) {
       g.gain.value = gain;
       g.connect(this.master);
+      const send = ctx.createGain();
+      send.gain.value = this.dry ? 0 : 0.35;
+      g.connect(send).connect(this.verb);
       return g;
     }
     const dx = pos[0] - this.lx, dy = pos[1] - this.ly, dz = pos[2] - this.lz, d = Math.hypot(dx, dy, dz);
@@ -55,6 +70,7 @@ export class Sound {
       const rx = Math.cos(this.lyaw) * dx - Math.sin(this.lyaw) * dz;
       pan.pan.value = d < 0.5 ? 0 : Math.max(-0.8, Math.min(0.8, rx / Math.max(d, 1)));
       g.connect(lp).connect(pan).connect(this.master);
+      pan.connect(this.verb);
     } else g.connect(lp).connect(this.master);
     return g;
   }
@@ -93,6 +109,7 @@ export class Sound {
     if (!this.ready || this.voices > 40) return;
     this.voices++;
     setTimeout(() => this.voices--, 400);
+    this.dry = UI_SOUNDS.has(name);
     const t = this.ctx.currentTime, o = this.out(pos, gain);
     const r = () => 0.9 + Math.random() * 0.2;
     switch (name) {

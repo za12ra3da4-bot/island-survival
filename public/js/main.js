@@ -11,6 +11,7 @@ import { LocalPlayer } from './player.js';
 import { HUD, esc } from './hud.js';
 import { FX } from './fx.js';
 import { Sound } from './audio.js';
+import { Post } from './post.js';
 
 const $ = (id) => document.getElementById(id);
 const store = {
@@ -18,7 +19,7 @@ const store = {
   set: (k, v) => { try { localStorage.setItem(k, v); } catch { /* 저장 불가 */ } },
 };
 const CYCLE_LEN = CYCLE.day + CYCLE.night;
-const DEFAULTS = { sens: 1, fov: 75, vol: 0.7, invertY: false, shadows: true, quality: 1 };
+const DEFAULTS = { sens: 1, fov: 75, vol: 0.7, invertY: false, shadows: true, quality: 1, ao: true, bloom: true };
 let settings = { ...DEFAULTS };
 try { settings = { ...DEFAULTS, ...JSON.parse(store.get('island.settings') || '{}') }; } catch { /* 기본값 */ }
 const saveSettings = () => store.set('island.settings', JSON.stringify(settings));
@@ -27,16 +28,22 @@ const saveSettings = () => store.set('island.settings', JSON.stringify(settings)
 const canvas = $('view');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
 renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFShadowMap;
-const applyQuality = () => {
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, settings.quality));
-  renderer.setSize(innerWidth, innerHeight, false);
-};
-applyQuality();
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.NeutralToneMapping;
+renderer.toneMappingExposure = 1.05;
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(75, innerWidth / innerHeight, 0.08, 1200);
+const camera = new THREE.PerspectiveCamera(75, innerWidth / innerHeight, 0.1, 900);
 camera.rotation.order = 'YXZ';
 scene.add(camera);
+const post = new Post(renderer, scene, camera);
+post.configure(settings);
+const applyQuality = () => {
+  const pr = Math.min(window.devicePixelRatio || 1, settings.quality);
+  renderer.setPixelRatio(pr);
+  renderer.setSize(innerWidth, innerHeight, false);
+  post.setSize(innerWidth, innerHeight, pr);
+};
+applyQuality();
 window.addEventListener('resize', () => {
   camera.aspect = innerWidth / innerHeight;
   camera.updateProjectionMatrix();
@@ -736,6 +743,7 @@ function openSettings() {
   body.innerHTML = [
     slider('sens', '마우스 감도', 0.1, 4, 0.05), slider('fov', '시야각', 60, 110, 1), slider('vol', '음량', 0, 1, 0.05),
     slider('quality', '화질 (해상도)', 0.6, 2, 0.1), toggle('invertY', '상하 반전'), toggle('shadows', '그림자 (다음 판부터)'),
+    toggle('ao', '입체 음영 (AO)'), toggle('bloom', '빛 번짐'),
   ].join('');
   body.querySelectorAll('input[type=range]').forEach((r) => r.addEventListener('input', () => {
     settings[r.dataset.k] = +r.value;
@@ -748,6 +756,7 @@ function openSettings() {
     settings[b.dataset.t] = !settings[b.dataset.t];
     b.classList.toggle('on', settings[b.dataset.t]);
     b.textContent = settings[b.dataset.t] ? '켬' : '끔';
+    post.configure(settings);
     saveSettings();
   }));
   $('settingsModal').hidden = false;
@@ -780,7 +789,7 @@ function frame() {
       camera.position.set(Math.cos(previewAng) * 175, 70, Math.sin(previewAng) * 175);
       camera.lookAt(0, 8, 0);
       preview.update(dt, camera, 40 + Math.sin(game.time * 0.02) * 20, null);
-      renderer.render(scene, camera);
+      post.render(dt);
     }
     return;
   }
@@ -803,7 +812,7 @@ function frame() {
   fx.update(dt);
   hud.frame(dt);
   sound.listen(camera.position.x, camera.position.y, camera.position.z, player.alive ? player.yaw : camera.rotation.y);
-  renderer.render(scene, camera);
+  post.render(dt);
 }
 
 buildPreview();

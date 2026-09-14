@@ -247,9 +247,9 @@ export function buildStruct(type, lv = 1) {
         return M(parts);
       }));
       flames = new THREE.Group();
-      const f1 = new THREE.Mesh(Cone(0.3, 0.9, 6), new THREE.MeshBasicMaterial({ color: 0xff8a1f }));
+      const f1 = new THREE.Mesh(Cone(0.3, 0.9, 6), new THREE.MeshBasicMaterial({ color: new THREE.Color(0xff8a1f).multiplyScalar(2.2) }));
       f1.position.y = 0.55;
-      const f2 = new THREE.Mesh(Cone(0.17, 0.6, 5), new THREE.MeshBasicMaterial({ color: 0xffe066 }));
+      const f2 = new THREE.Mesh(Cone(0.17, 0.6, 5), new THREE.MeshBasicMaterial({ color: new THREE.Color(0xffe066).multiplyScalar(3) }));
       f2.position.y = 0.45;
       flames.add(f1, f2);
       g.add(flames);
@@ -335,32 +335,50 @@ export function itemGeometry(id) {
   return cached(`item:${id}`, () => {
     const I = ITEMS[id] || {};
     const tc = TIER_COLOR[I.tier] || '#cccccc';
+    const band = (ys) => ys.map((y) => P(Cyl(0.04, 0.04, 0.03, 6), '#4a2f1c', { y }));
+    const hot = I.tier >= 3 ? '#e8b923' : shade(tc, 0.62);
     switch (I.kind) {
       case 'sword': return M([
-        P(Cyl(0.03, 0.03, 0.22, 6), '#5a3a22', { y: 0.1 }),
-        P(Sph(0.045, 6, 4), shade(tc, 0.7), { y: -0.02 }),
-        P(Box(0.24, 0.05, 0.08), shade(tc, 0.75), { y: 0.23 }),
-        P(Box(0.08, 0.62, 0.028), tc, { y: 0.56 }, 0.1),
-        P(Cone(0.057, 0.14, 4), tc, { y: 0.94, ry: PI / 4, sz: 0.4 }),
+        P(Cyl(0.032, 0.03, 0.22, 6), '#5a3a22', { y: 0.1 }),
+        ...band([0.03, 0.1, 0.17]),
+        P(Oct(0.05), hot, { y: -0.03, sy: 1.3 }),
+        P(Box(0.3, 0.05, 0.09), hot, { y: 0.23 }),
+        P(Box(0.05, 0.09, 0.1), hot, { x: 0.16, y: 0.25 }),
+        P(Box(0.05, 0.09, 0.1), hot, { x: -0.16, y: 0.25 }),
+        P(Box(0.1, 0.62, 0.024), tc, { y: 0.57 }, 0.05),
+        P(Box(0.022, 0.56, 0.032), shade(tc, 0.7), { y: 0.55 }),
+        P(Box(0.016, 0.62, 0.02), shade(tc, 1.3), { x: 0.05, y: 0.57 }, 0),
+        P(Box(0.016, 0.62, 0.02), shade(tc, 1.3), { x: -0.05, y: 0.57 }, 0),
+        P(Cone(0.071, 0.17, 4), tc, { y: 0.965, ry: PI / 4, sz: 0.35 }),
+        ...(I.tier >= 4 ? [P(Oct(0.035), '#bffcff', { y: 0.23, z: 0.05 }, 0), P(Oct(0.035), '#bffcff', { y: 0.23, z: -0.05 }, 0)] : []),
       ]);
       case 'axe': return M([
-        P(Cyl(0.03, 0.035, 0.78, 6), '#8a5a33', { y: 0.32 }),
-        P(Box(0.24, 0.2, 0.06), tc, { x: 0.12, y: 0.62 }, 0.1),
-        P(Box(0.06, 0.28, 0.065), shade(tc, 1.15), { x: 0.25, y: 0.62 }),
-        P(Box(0.09, 0.11, 0.06), shade(tc, 0.8), { x: -0.05, y: 0.62 }),
+        P(Cyl(0.03, 0.036, 0.8, 6), '#8a5a33', { y: 0.32 }),
+        ...band([0.0, 0.07]),
+        P(Box(0.1, 0.13, 0.08), shade(tc, 0.72), { x: -0.02, y: 0.64 }),
+        P(Box(0.2, 0.22, 0.05), tc, { x: 0.13, y: 0.64 }, 0.06),
+        P(Box(0.07, 0.36, 0.055), tc, { x: 0.25, y: 0.64 }, 0.06),
+        P(Box(0.025, 0.38, 0.062), shade(tc, 1.35), { x: 0.29, y: 0.64 }, 0),
+        P(Cone(0.05, 0.13, 4), shade(tc, 0.72), { x: -0.13, y: 0.64, rz: PI / 2 }),
+        P(Box(0.03, 0.06, 0.086), hot, { x: 0.03, y: 0.64 }),
       ]);
       case 'pick': return M([
-        P(Cyl(0.03, 0.035, 0.78, 6), '#8a5a33', { y: 0.32 }),
-        P(Box(0.4, 0.09, 0.07), tc, { y: 0.68 }, 0.1),
-        P(Cone(0.05, 0.22, 4), shade(tc, 1.1), { x: 0.29, y: 0.64, rz: -PI / 2 - 0.35 }),
-        P(Cone(0.05, 0.22, 4), shade(tc, 1.1), { x: -0.29, y: 0.64, rz: PI / 2 + 0.35 }),
+        P(Cyl(0.03, 0.036, 0.8, 6), '#8a5a33', { y: 0.32 }),
+        ...band([0.0, 0.07]),
+        P(Box(0.12, 0.13, 0.09), shade(tc, 0.72), { y: 0.68 }),
+        P(Box(0.4, 0.08, 0.065), tc, { y: 0.69 }, 0.06),
+        P(Cone(0.045, 0.28, 4), shade(tc, 1.15), { x: 0.31, y: 0.64, rz: -PI / 2 - 0.4 }),
+        P(Cone(0.045, 0.28, 4), shade(tc, 1.15), { x: -0.31, y: 0.64, rz: PI / 2 + 0.4 }),
+        P(Box(0.13, 0.03, 0.095), hot, { y: 0.62 }),
       ]);
       case 'bow': {
-        const arc = new THREE.TorusGeometry(0.46, 0.026, 5, 14, PI * 0.92);
+        const arc = new THREE.TorusGeometry(0.46, 0.028, 5, 16, PI * 0.92);
         return M([
           P(arc, '#8a5a33', { x: -0.3, y: 0.0, rz: -PI * 0.46 }),
           P(Cyl(0.006, 0.006, 0.9, 3), '#f2ecdc', { x: 0.14, y: 0.0 }, 0),
-          P(Cyl(0.04, 0.04, 0.16, 6), '#3d2a1a', { x: -0.3, y: 0.0 }),
+          P(Cyl(0.045, 0.045, 0.18, 6), '#3d2a1a', { x: -0.3, y: 0.0 }),
+          P(Cyl(0.05, 0.05, 0.03, 6), '#e8413a', { x: -0.3, y: 0.1 }),
+          P(Cyl(0.05, 0.05, 0.03, 6), '#e8413a', { x: -0.3, y: -0.1 }),
         ]);
       }
     }
@@ -439,19 +457,43 @@ export function buildPlayer(color) {
   const mat = VC;
   const root = new THREE.Group();
   const bodyG = pivot(root, 0, 0, 0);
-  mesh(M([
-    P(Cap(0.38, 0.55, 10), color, { y: 0.95 }, 0.08),
-    P(Box(0.09, 0.15, 0.04), '#1b1b1b', { x: 0.13, y: 1.18, z: 0.36 }, 0),
-    P(Box(0.09, 0.15, 0.04), '#1b1b1b', { x: -0.13, y: 1.18, z: 0.36 }, 0),
-    P(Box(0.05, 0.05, 0.02), '#ffffff', { x: 0.15, y: 1.22, z: 0.385 }, 0),
-    P(Box(0.05, 0.05, 0.02), '#ffffff', { x: -0.11, y: 1.22, z: 0.385 }, 0),
-    P(Box(0.12, 0.04, 0.03), shade(color, 0.6), { y: 1.02, z: 0.37 }, 0),
-  ]), mat, bodyG);
+  const dark = shade(color, 0.55), light = shade(color, 1.2), scarf = '#f4efe3';
+  mesh(cached(`pbody:${color}`, () => M([
+    P(Cap(0.38, 0.55, 12), color, { y: 0.95 }, 0.05),
+    P(Sph(0.3, 10, 7), light, { y: 0.74, z: 0.17, sz: 0.55, sy: 0.85 }, 0.04),
+    // 얼굴
+    P(Box(0.1, 0.17, 0.04), '#1b1b1b', { x: 0.13, y: 1.2, z: 0.38 }, 0),
+    P(Box(0.1, 0.17, 0.04), '#1b1b1b', { x: -0.13, y: 1.2, z: 0.38 }, 0),
+    P(Box(0.045, 0.05, 0.02), '#ffffff', { x: 0.15, y: 1.25, z: 0.405 }, 0),
+    P(Box(0.045, 0.05, 0.02), '#ffffff', { x: -0.11, y: 1.25, z: 0.405 }, 0),
+    P(Box(0.12, 0.03, 0.03), dark, { x: 0.14, y: 1.34, z: 0.35, rz: -0.15 }, 0),
+    P(Box(0.12, 0.03, 0.03), dark, { x: -0.14, y: 1.34, z: 0.35, rz: 0.15 }, 0),
+    P(Box(0.08, 0.035, 0.02), '#ff8fa3', { x: 0.25, y: 1.07, z: 0.29, ry: 0.7 }, 0),
+    P(Box(0.08, 0.035, 0.02), '#ff8fa3', { x: -0.25, y: 1.07, z: 0.29, ry: -0.7 }, 0),
+    P(Box(0.09, 0.03, 0.03), dark, { y: 1.05, z: 0.385 }, 0),
+    // 목도리
+    P(new THREE.TorusGeometry(0.34, 0.075, 5, 14), scarf, { y: 0.88, rx: PI / 2 }, 0.08),
+    P(new THREE.TorusGeometry(0.34, 0.03, 4, 14), '#e8413a', { y: 0.88, rx: PI / 2, s: 1.06 }, 0.05),
+    P(Box(0.13, 0.32, 0.06), scarf, { x: -0.17, y: 0.7, z: 0.4, rz: 0.2 }, 0.08),
+    // 배낭
+    P(Box(0.44, 0.46, 0.22), '#8a5a33', { y: 0.98, z: -0.43 }, 0.08),
+    P(Box(0.46, 0.14, 0.24), '#6b4428', { y: 1.19, z: -0.44 }),
+    P(Cyl(0.09, 0.09, 0.5, 8), '#3f8a33', { y: 1.32, z: -0.42, rz: PI / 2 }, 0.08),
+    P(Box(0.07, 0.09, 0.05), '#d4a93a', { y: 1.08, z: -0.56 }),
+    P(Box(0.05, 0.5, 0.04), '#6b4428', { x: 0.19, y: 0.98, z: 0.0, rx: 0.1, s: 1 }),
+    // 새싹
+    P(Cyl(0.016, 0.016, 0.16, 4), '#3f8a33', { y: 1.66 }),
+    P(Box(0.15, 0.022, 0.08), '#6bcb77', { x: 0.07, y: 1.74, rz: 0.45 }),
+    P(Box(0.15, 0.022, 0.08), '#5cbf4a', { x: -0.07, y: 1.72, rz: -0.45 }),
+  ])), mat, bodyG);
   const footL = pivot(root, 0.18, 0.08, 0), footR = pivot(root, -0.18, 0.08, 0);
-  const footGeo = cached(`foot:${color}`, () => M([P(Box(0.22, 0.14, 0.34), shade(color, 0.55), { z: 0.04 })]));
+  const footGeo = cached(`foot:${color}`, () => M([
+    P(Box(0.22, 0.14, 0.34), dark, { z: 0.04 }, 0.06),
+    P(Box(0.235, 0.045, 0.36), '#3a2a1f', { y: -0.07, z: 0.04 }),
+  ]));
   mesh(footGeo, mat, footL);
   mesh(footGeo, mat, footR);
-  const handGeo = cached(`hand:${color}`, () => M([P(Sph(0.12, 8, 6), shade(color, 0.85))]));
+  const handGeo = cached(`hand:${color}`, () => M([P(Sph(0.12, 10, 7), shade(color, 0.85), {}, 0.05)]));
   const handL = pivot(bodyG, 0.52, 0.9, 0.08), handR = pivot(bodyG, -0.52, 0.9, 0.08);
   mesh(handGeo, mat, handL);
   mesh(handGeo, mat, handR);
@@ -491,7 +533,7 @@ const ENEMY_PAL = {
 // 빛나는 조각(눈·룬·수정)은 조명을 받지 않아 밤에도 또렷하다
 const glowMats = new Map();
 function glowPart(parent, key, makeGeo, color, x, y, z, rot = null) {
-  if (!glowMats.has(color)) glowMats.set(color, new THREE.MeshBasicMaterial({ color }));
+  if (!glowMats.has(color)) glowMats.set(color, new THREE.MeshBasicMaterial({ color: new THREE.Color(color).multiplyScalar(2.6) }));
   const m = new THREE.Mesh(cached(key, makeGeo), glowMats.get(color));
   m.position.set(x, y, z);
   if (rot) m.rotation.set(rot[0], rot[1], rot[2]);

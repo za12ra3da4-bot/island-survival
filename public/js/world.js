@@ -29,6 +29,28 @@ export function daylight(clock) {
   return { d: 0, f, night: true, warm: ss(0.08, 0, f) * 0.6 };
 }
 
+// 바람에 흔들리는 재질 — 높이(base 위)만큼 휘어진다
+const windU = { uTime: { value: 0 } };
+function windMat(key, base, amp) {
+  const m = VC.clone();
+  m.onBeforeCompile = (sh) => {
+    sh.uniforms.uTime = windU.uTime;
+    sh.vertexShader = `uniform float uTime;\n${sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
+      vec3 wip = vec3(0.0);
+      #ifdef USE_INSTANCING
+        wip = instanceMatrix[3].xyz;
+      #endif
+      float wph = uTime * 1.6 + wip.x * 0.13 + wip.z * 0.11;
+      float wb = max(transformed.y - ${base.toFixed(3)}, 0.0);
+      wb = wb * wb * ${amp.toFixed(4)};
+      transformed.x += (sin(wph) + 0.45 * sin(wph * 2.7 + 1.3)) * wb;
+      transformed.z += cos(wph * 0.83) * wb * 0.6;`)}`;
+  };
+  m.customProgramCacheKey = () => `wind:${key}`;
+  return m;
+}
+const WIND = { tree: [1.8, 0.02], pine: [1.4, 0.012], palm: [0.8, 0.018], bush: [0.15, 0.05] };
+
 const C = (h) => new THREE.Color(h);
 const PAL = {
   seabed: C('#cdb77f'), sand: C('#ecd9a0'), wetsand: C('#d9c48a'), grass: [C('#7cc653'), C('#6dbb47'), C('#62b041')],
@@ -76,10 +98,11 @@ export class World {
     this.hemi = new THREE.HemisphereLight(0xdff4ff, 0x6b8f4a, 1.0);
     this.sun = new THREE.DirectionalLight(0xffffff, 2.4);
     this.sun.castShadow = this.shadows;
-    this.sun.shadow.mapSize.set(2048, 2048);
-    Object.assign(this.sun.shadow.camera, { left: -45, right: 45, top: 45, bottom: -45, near: 1, far: 260 });
-    this.sun.shadow.bias = -0.0006;
-    this.sun.shadow.normalBias = 0.05;
+    this.sun.shadow.mapSize.set(4096, 4096);
+    Object.assign(this.sun.shadow.camera, { left: -55, right: 55, top: 55, bottom: -55, near: 1, far: 280 });
+    this.sun.shadow.bias = -0.0004;
+    this.sun.shadow.normalBias = 0.06;
+    this.sun.shadow.radius = 3;
     this.moon = new THREE.DirectionalLight(0x8fb0ff, 0);
     this.group.add(this.hemi, this.sun, this.sun.target, this.moon, this.moon.target);
     this.fireLights = [];
@@ -91,17 +114,31 @@ export class World {
   }
 
   buildSky() {
-    this.skyU = { top: { value: PAL.dayTop.clone() }, hor: { value: PAL.dayHor.clone() } };
-    this.skyDome = new THREE.Mesh(new THREE.SphereGeometry(480, 24, 12), new THREE.ShaderMaterial({
+    this.skyU = {
+      top: { value: PAL.dayTop.clone() }, hor: { value: PAL.dayHor.clone() },
+      sunDir: { value: new THREE.Vector3(0, 1, 0) }, sunCol: { value: new THREE.Color(1, 0.95, 0.8) }, sunVis: { value: 1 },
+      moonDir: { value: new THREE.Vector3(0, -1, 0) }, moonVis: { value: 0 },
+    };
+    this.skyDome = new THREE.Mesh(new THREE.SphereGeometry(480, 32, 16), new THREE.ShaderMaterial({
       uniforms: this.skyU, side: THREE.BackSide, depthWrite: false, fog: false,
       vertexShader: 'varying vec3 vP; void main(){ vP = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
-      fragmentShader: 'uniform vec3 top; uniform vec3 hor; varying vec3 vP; void main(){ float k = pow(max(vP.y, 0.0), 0.55); gl_FragColor = vec4(mix(hor, top, k), 1.0); }',
+      fragmentShader: `
+        uniform vec3 top; uniform vec3 hor; uniform vec3 sunDir; uniform vec3 sunCol; uniform float sunVis; uniform vec3 moonDir; uniform float moonVis; varying vec3 vP;
+        void main(){
+          vec3 d = normalize(vP);
+          float k = pow(max(d.y, 0.0), 0.5);
+          vec3 c = mix(hor, top, k);
+          c = mix(c, hor * 0.9, smoothstep(0.0, -0.25, d.y));
+          float s = max(dot(d, sunDir), 0.0);
+          c += sunCol * (pow(s, 5.0) * 0.28 + pow(s, 48.0) * 0.55) * sunVis;
+          c += sunCol * smoothstep(0.99935, 0.9997, s) * 7.0 * sunVis;
+          float m = max(dot(d, moonDir), 0.0);
+          c += vec3(0.75, 0.82, 1.0) * (smoothstep(0.9993, 0.99955, m) * 2.2 + pow(m, 60.0) * 0.12) * moonVis;
+          gl_FragColor = vec4(c, 1.0);
+        }`,
     }));
     this.skyDome.renderOrder = -10;
     this.group.add(this.skyDome);
-    this.sunBall = new THREE.Mesh(new THREE.SphereGeometry(16, 12, 8), new THREE.MeshBasicMaterial({ color: 0xfff1a8, fog: false }));
-    this.moonBall = new THREE.Mesh(new THREE.SphereGeometry(11, 12, 8), new THREE.MeshBasicMaterial({ color: 0xe6ecff, fog: false }));
-    this.group.add(this.sunBall, this.moonBall);
     const rnd = mulberry(this.seed ^ 777);
     const N = 900, pos = new Float32Array(N * 3);
     for (let i = 0; i < N; i++) {
@@ -115,7 +152,7 @@ export class World {
     this.scene.fog = new THREE.Fog(0xbfe9ff, 80, 330);
     // 구름
     this.clouds = [];
-    const cloudMat = new THREE.MeshLambertMaterial({ color: 0xffffff, flatShading: true, emissive: 0x555555, fog: false });
+    const cloudMat = new THREE.MeshLambertMaterial({ color: 0xffffff, flatShading: true, emissive: 0x555555, fog: false, transparent: true, opacity: 0.94 });
     this.cloudMat = cloudMat;
     const cg = decorGeometry('cloud');
     for (let i = 0; i < 20; i++) {
@@ -183,12 +220,37 @@ export class World {
   }
 
   buildWater() {
-    const g = new THREE.PlaneGeometry(900, 900, 72, 72).toNonIndexed();
+    // 지형 높이 텍스처 → 물 깊이에 따라 색·투명도, 해안 거품
+    const T = this.terrain, N = RES + 1, hd = new Uint16Array(N * N);
+    for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) hd[i + j * N] = THREE.DataUtils.toHalfFloat(T.vert(i, j));
+    const tex = new THREE.DataTexture(hd, N, N, THREE.RedFormat, THREE.HalfFloatType);
+    tex.minFilter = tex.magFilter = THREE.LinearFilter;
+    tex.needsUpdate = true;
+    this.waterU = {
+      uTime: { value: 0 }, uH: { value: tex }, uN: { value: N }, uCell: { value: CELL }, uHalf: { value: HALF },
+      uShallow: { value: new THREE.Color('#4fe3d2') }, uDeep: { value: new THREE.Color('#1673c2') },
+    };
+    const g = new THREE.PlaneGeometry(900, 900, 96, 96).toNonIndexed();
     g.rotateX(-PI / 2);
     this.waterBase = g.attributes.position.array.slice();
-    this.water = new THREE.Mesh(g, new THREE.MeshPhongMaterial({
-      color: 0x2fa3dc, transparent: true, opacity: 0.82, flatShading: true, shininess: 80, specular: 0x9ad8ff,
-    }));
+    const mat = new THREE.MeshPhongMaterial({ color: 0xffffff, transparent: true, opacity: 0.9, flatShading: true, shininess: 110, specular: 0xdff6ff });
+    mat.onBeforeCompile = (sh) => {
+      Object.assign(sh.uniforms, this.waterU);
+      sh.vertexShader = `varying vec3 vWP;\n${sh.vertexShader.replace('#include <project_vertex>', '#include <project_vertex>\n  vWP = (modelMatrix * vec4(transformed, 1.0)).xyz;')}`;
+      sh.fragmentShader = `uniform float uTime; uniform sampler2D uH; uniform float uN; uniform float uCell; uniform float uHalf; uniform vec3 uShallow; uniform vec3 uDeep; varying vec3 vWP;\n${sh.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
+        vec2 huv = ((vWP.xz + uHalf) / uCell + 0.5) / uN;
+        float depth = max(vWP.y - texture2D(uH, huv).r, 0.0);
+        diffuseColor.rgb = mix(uShallow, uDeep, smoothstep(0.0, 8.0, depth));
+        diffuseColor.a = mix(0.42, 0.94, smoothstep(0.0, 3.5, depth));
+        float n = sin(vWP.x * 0.9 + uTime * 1.3) * sin(vWP.z * 0.8 - uTime * 1.1);
+        float edge = 0.6 + 0.25 * n + 0.18 * sin(uTime * 1.7 + vWP.x * 0.21 + vWP.z * 0.17);
+        float foam = 1.0 - smoothstep(edge * 0.55, edge, depth);
+        float sparkle = step(0.985, sin(vWP.x * 3.1 + uTime * 2.3) * sin(vWP.z * 2.7 - uTime * 1.9)) * smoothstep(4.0, 10.0, depth);
+        diffuseColor.rgb = mix(diffuseColor.rgb, vec3(1.0), clamp(foam * 0.92 + sparkle * 0.6, 0.0, 1.0));
+        diffuseColor.a = mix(diffuseColor.a, 1.0, foam);`)}`;
+    };
+    this.water = new THREE.Mesh(g, mat);
+    this.water.userData.noAO = true;
     this.water.position.y = 0;
     this.water.renderOrder = 1;
     this.group.add(this.water);
@@ -217,9 +279,9 @@ export class World {
       this.group.add(mesh);
       return mesh;
     };
-    put(decorGeometry('grass'), 6000, (h, sl) => h > 1.8 && h < 36 && sl < 0.8);
+    put(decorGeometry('grass'), 12000, (h, sl) => h > 1.8 && h < 36 && sl < 0.8).material = windMat('grass', 0, 0.4);
     const flowerCols = ['#ffffff', '#ffd23f', '#ff6b9a', '#b58cff', '#ff8a3d'].map((c) => new THREE.Color(c));
-    put(decorGeometry('flower'), 900, (h, sl) => h > 2.5 && h < 22 && sl < 0.6, (r) => flowerCols[Math.floor(r() * flowerCols.length)]);
+    put(decorGeometry('flower'), 1400, (h, sl) => h > 2.5 && h < 22 && sl < 0.6, (r) => flowerCols[Math.floor(r() * flowerCols.length)]).material = windMat('flower', 0, 0.3);
     put(decorGeometry('pebble'), 700, (h) => h > -0.3 && h < 2);
   }
 
@@ -231,7 +293,7 @@ export class World {
     for (const n of this.nodes) (byType[n.type] ||= []).push(n);
     this.nodeMeshes = {};
     for (const [type, arr] of Object.entries(byType)) {
-      const mesh = new THREE.InstancedMesh(nodeGeometry(type), VC, arr.length);
+      const mesh = new THREE.InstancedMesh(nodeGeometry(type), WIND[type] ? windMat(type, ...WIND[type]) : VC, arr.length);
       mesh.castShadow = this.shadows;
       mesh.receiveShadow = true;
       arr.forEach((n, k) => { n.k = k; n.mesh = mesh; });
@@ -400,6 +462,8 @@ export class World {
   update(dt, cam, clock, focus) {
     this.t += dt;
     const t = this.t;
+    windU.uTime.value = t;
+    this.waterU.uTime.value = t;
     // 물결
     const pos = this.water.geometry.attributes.position, base = this.waterBase;
     for (let i = 0; i < pos.count; i++) {
@@ -423,10 +487,11 @@ export class World {
     const sunDir = new THREE.Vector3(Math.cos(sa) * 0.8, Math.sin(sa), 0.45).normalize();
     const ma = L.night ? PI * L.f : -0.3;
     const moonDir = new THREE.Vector3(-Math.cos(ma) * 0.8, Math.sin(ma), -0.35).normalize();
-    this.sunBall.position.copy(cam.position).addScaledVector(sunDir, 400);
-    this.moonBall.position.copy(cam.position).addScaledVector(moonDir, 400);
-    this.sunBall.visible = sunDir.y > -0.1;
-    this.moonBall.visible = L.night;
+    this.skyU.sunDir.value.copy(sunDir);
+    this.skyU.sunVis.value = ss(-0.15, 0.05, sunDir.y);
+    this.skyU.sunCol.value.setRGB(1, 0.93 - L.warm * 0.3, 0.78 - L.warm * 0.45);
+    this.skyU.moonDir.value.copy(moonDir);
+    this.skyU.moonVis.value = L.night ? ss(-0.1, 0.1, moonDir.y) : 0;
     const fx = focus ? focus.x : cam.position.x, fz = focus ? focus.z : cam.position.z;
     this.sun.position.set(fx + sunDir.x * 120, Math.max(10, sunDir.y * 120), fz + sunDir.z * 120);
     this.sun.target.position.set(fx, 0, fz);
@@ -434,7 +499,7 @@ export class World {
     this.sun.color.setHex(0xffffff).lerp(new THREE.Color(0xffb070), L.warm * 0.8);
     this.moon.position.set(fx + moonDir.x * 100, Math.max(20, moonDir.y * 100), fz + moonDir.z * 100);
     this.moon.target.position.set(fx, 0, fz);
-    this.moon.intensity = L.night ? 0.55 : 0;
+    this.moon.intensity = L.night ? 0.85 : 0;
     this.hemi.intensity = 0.45 + 0.75 * L.d;
     this.hemi.color.setHex(0x8fa8ff).lerp(new THREE.Color(0xdff4ff), L.d);
     this.stars.material.opacity = (1 - L.d) * (L.night ? 1 : 0.6);
