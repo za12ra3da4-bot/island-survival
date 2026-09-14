@@ -1,0 +1,23 @@
+{
+  "name": "island-survival",
+  "version": "1.0.0",
+  "private": true,
+  "description": "무인도 서바이벌 - 친구들과 함께하는 로우폴리 협동 생존 게임",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "postinstall": "node scripts/copy-vendor.js",
+    "icons": "node scripts/gen-icons.js",
+    "sim": "node scripts/simulate.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "express": "^5.2.1",
+    "socket.io": "^4.8.3",
+    "three": "^0.186.0"
+  }
+}

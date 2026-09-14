@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>무인도 서바이벌</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=Jua&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<script type="importmap">{ "imports": { "three": "./vendor/three/three.module.js" } }</script>
+</head>
+<body>
+<canvas id="view"></canvas>
+
+<!-- 메뉴 -->
+<section id="menu" class="screen">
+  <div class="menu-wrap">
+    <div class="logo">
+      <div class="logo-top">무인도</div>
+      <div class="logo-bottom">서바이벌</div>
+      <div class="logo-sub">친구들과 살아남아 섬을 탈출하라!</div>
+    </div>
+    <div class="card menu-card">
+      <div class="field"><label>이름</label><input id="nameInput" maxlength="12" placeholder="생존자 이름" autocomplete="off"></div>
+      <div class="field"><label>색</label><div id="colorPick" class="colors"></div></div>
+      <div class="menu-tabs"><button data-tab="create" class="on">방 만들기</button><button data-tab="join">참가하기</button></div>
+      <div id="tab-create">
+        <div class="opt"><span>모드</span><div class="seg" id="modeSeg"><button data-v="escape" class="on">탈출</button><button data-v="endless">무한 생존</button></div></div>
+        <p class="hint" id="modeDesc"></p>
+        <div class="opt"><span>난이도</span><div class="seg" id="diffSeg"><button data-v="easy">쉬움</button><button data-v="normal" class="on">보통</button><button data-v="hard">어려움</button></div></div>
+        <label class="check"><input type="checkbox" id="publicCheck" checked> 열린 방 목록에 표시</label>
+        <button id="createBtn" class="btn big green">방 만들기</button>
+      </div>
+      <div id="tab-join" hidden>
+        <div class="join-row"><input id="codeInput" maxlength="4" placeholder="코드" autocomplete="off"><button id="joinBtn" class="btn">참가</button></div>
+        <div class="list-head"><span>열린 방</span><button id="refreshBtn" class="link">새로고침</button></div>
+        <ul id="roomList" class="room-list"></ul>
+      </div>
+      <p id="menuError" class="error"></p>
+      <p id="netStatus" class="net"></p>
+    </div>
+  </div>
+  <div class="menu-help"><b>WASD</b> 이동 <b>Shift</b> 달리기 <b>Space</b> 점프 <b>클릭</b> 공격·채집 <b>E</b> 상호작용 <b>Tab</b> 제작 <b>M</b> 지도 <b>1~9</b> 도구 <b>Esc</b> 일시정지</div>
+  <button id="menuSettingsBtn" class="btn corner">설정</button>
+</section>
+
+<!-- 대기실 -->
+<section id="lobby" class="screen" hidden>
+  <div class="card lobby-card">
+    <div class="lobby-head">
+      <div><span class="small">방 코드</span><div id="lobbyCode" class="code"></div></div>
+      <button id="copyLinkBtn" class="btn ghost">초대 링크 복사</button>
+    </div>
+    <div class="lobby-body">
+      <div class="lobby-col">
+        <h3>생존자 <span id="memberCount"></span></h3>
+        <ul id="memberList" class="members"></ul>
+        <div class="field"><label>내 색</label><div id="lobbyColors" class="colors"></div></div>
+      </div>
+      <div class="lobby-col">
+        <h3>설정</h3>
+        <div id="lobbyOpts"></div>
+        <h3>채팅</h3>
+        <div id="lobbyChatLog" class="chat-log"></div>
+        <input id="lobbyChatInput" maxlength="120" placeholder="할 말 입력 후 Enter" autocomplete="off">
+      </div>
+    </div>
+    <div class="lobby-foot">
+      <button id="leaveLobbyBtn" class="btn ghost">나가기</button>
+      <span id="lobbyWait"></span>
+      <button id="startBtn" class="btn big green">게임 시작!</button>
+    </div>
+  </div>
+</section>
+
+<!-- 불러오는 중 -->
+<section id="loading" class="screen" hidden>
+  <div class="spinner"><img src="assets/icons/p_herb.svg" alt=""></div>
+  <p id="loadingText">섬을 만드는 중…</p>
+</section>
+
+<!-- 게임 화면 -->
+<section id="hud" hidden>
+  <div id="topLeft"><canvas id="minimap" width="180" height="180"></canvas><div id="roomTag"></div></div>
+  <div id="topCenter">
+    <div id="dayBox"><canvas id="clockDial" width="64" height="64"></canvas><div><b id="dayText">1일째</b><small id="phaseText"></small></div></div>
+    <div id="bossBar" hidden><span id="bossName"></span><div class="bb"><i id="bossFill"></i></div></div>
+    <div id="finalBar" hidden><span id="finalText"></span></div>
+  </div>
+  <div id="topRight">
+    <div id="coinBox"><img src="assets/icons/coin.svg" alt=""><b id="coinText">0</b></div>
+    <div id="teamList"></div>
+  </div>
+
+  <div id="bars">
+    <div class="bar" id="hpBar"><img src="assets/icons/heart.svg" alt=""><div class="track"><i id="hpFill"></i><span id="hpText"></span></div></div>
+    <div class="bar small" id="stamBar"><img src="assets/icons/bolt.svg" alt=""><div class="track"><i id="stamFill"></i></div></div>
+    <div class="bar small" id="hungerBar"><img src="assets/icons/hunger.svg" alt=""><div class="track"><i id="hungerFill"></i><span id="hungerText"></span></div></div>
+  </div>
+  <div id="hotbar"></div>
+  <div id="powers"></div>
+  <div id="feed"></div>
+  <div id="toast"></div>
+  <div id="notice"></div>
+  <div id="prompt" hidden></div>
+  <div id="crosshair"></div>
+  <div id="hitmark"></div>
+  <div id="hurtDirs"></div>
+  <div id="dmgNums"></div>
+  <div id="vignette"></div>
+  <div id="chatBox"><div id="chatLog"></div><input id="chatInput" maxlength="120" placeholder="할 말 입력 후 Enter" autocomplete="off" hidden></div>
+
+  <div id="deadScreen" hidden>
+    <img src="assets/icons/skull.svg" alt="">
+    <h2>기절했습니다</h2>
+    <p id="deadSub"></p>
+    <p id="deadWatch"></p>
+  </div>
+
+  <div id="craftPanel" class="card panel" hidden>
+    <div class="panel-head"><h2><img src="assets/icons/hammer.svg" alt="">제작</h2><button class="btn ghost small" data-close>닫기 (Tab)</button></div>
+    <div class="craft-body">
+      <div class="craft-left">
+        <h3>가방</h3><div id="invGrid"></div>
+        <h3>능력</h3><div id="powerList"></div>
+      </div>
+      <div class="craft-right">
+        <div id="benchBox"></div>
+        <h3>만들 수 있어요</h3>
+        <div id="recipeList"></div>
+        <div id="lockedList"></div>
+        <p class="hint">Shift + 클릭하면 5개씩 만듭니다.</p>
+      </div>
+    </div>
+  </div>
+
+  <div id="boatPanel" class="card panel narrow" hidden>
+    <div class="panel-head"><h2><img src="assets/icons/boat.svg" alt="">난파선 수리</h2><button class="btn ghost small" data-close>닫기</button></div>
+    <div id="boatParts"></div>
+    <p id="boatHint" class="hint"></p>
+    <div class="panel-foot"><button id="boatDeposit" class="btn big">재료 넣기</button><button id="boatLaunch" class="btn big green" hidden>출항!</button></div>
+  </div>
+
+  <div id="mapPanel" class="card panel map" hidden>
+    <div class="panel-head"><h2><img src="assets/icons/map.svg" alt="">지도</h2>
+      <div class="legend"><span><i class="lg chest"></i>상자</span><span><i class="lg gold"></i>황금 상자</span><span><i class="lg boat"></i>난파선</span><span><i class="lg foe"></i>적</span></div>
+      <button class="btn ghost small" data-close>닫기 (M)</button></div>
+    <canvas id="bigMap" width="620" height="620"></canvas>
+  </div>
+
+  <div id="pauseMenu" class="card" hidden>
+    <h2>일시정지</h2>
+    <button id="resumeBtn" class="btn big green">계속하기</button>
+    <button id="pauseSettingsBtn" class="btn">설정</button>
+    <button id="endGameBtn" class="btn ghost">게임 끝내고 대기실로</button>
+    <button id="pauseLeaveBtn" class="btn ghost">방 나가기</button>
+    <div class="keys"><b>WASD</b> 이동 <b>Shift</b> 달리기 <b>Space</b> 점프<br><b>클릭</b> 공격·채집·먹기·설치 <b>E</b> 상호작용 <b>R</b> 설치물 회전<br><b>Tab</b> 제작 <b>M</b> 지도 <b>1~9 · 휠</b> 도구 <b>Enter</b> 채팅</div>
+  </div>
+
+  <div id="powerCard" hidden></div>
+
+  <div id="results" class="card" hidden>
+    <h1 id="resTitle"></h1>
+    <p id="resSub"></p>
+    <table id="resTable"></table>
+    <div class="panel-foot"><button id="resLeave" class="btn ghost">방 나가기</button><span id="resWait">방장이 다음 판을 준비하는 중…</span><button id="resAgain" class="btn big green">대기실로</button></div>
+  </div>
+</section>
+
+<div id="settingsModal" class="modal" hidden>
+  <div class="card settings-card">
+    <h2>설정</h2>
+    <div id="settingsBody"></div>
+    <button id="settingsClose" class="btn">닫기</button>
+  </div>
+</div>
+
+<script src="server-url.js"></script>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
