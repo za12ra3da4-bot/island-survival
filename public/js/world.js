@@ -3,7 +3,19 @@ import * as THREE from 'three';
 import { Terrain, HALF, RES, CELL } from '../shared/terrain.js';
 import { Colliders } from '../shared/physics.js';
 import { NODES, NODE_IDS, STRUCTS, STRUCT_IDS, CYCLE, BOAT_PARTS } from '../shared/config.js';
-import { VC, nodeGeometry, decorGeometry, buildChest, buildStruct, buildBoat } from './models.js';
+import { VC, nodeGeometry, decorGeometry, buildChest, buildStruct, buildBoat, buildSupport } from './models.js';
+import { baseY, structCollider } from '../shared/build.js';
+
+// 비탈에 지은 바닥·벽이 떠 보이지 않게 땅까지 내려가는 받침 길이
+function supportDrop(type, x, z, rot, y, T) {
+  const S = STRUCTS[type];
+  if (!S.snap || S.roof || type === 'fence') return 0;
+  const c = Math.cos(rot) * 1.4, s = -Math.sin(rot) * 1.4;
+  const pts = S.snap === 'floor' ? [[1.3, 1.3], [-1.3, 1.3], [1.3, -1.3], [-1.3, -1.3]] : [[c, s], [-c, -s], [0, 0]];
+  let lo = Infinity;
+  for (const [a, b] of pts) lo = Math.min(lo, T.h(x + a, z + b));
+  return y - 1.0 - Math.max(lo, -1.5) + 0.2;
+}
 
 const PI = Math.PI;
 const ss = (a, b, x) => {
@@ -106,8 +118,8 @@ export class World {
     this.moon = new THREE.DirectionalLight(0x8fb0ff, 0);
     this.group.add(this.hemi, this.sun, this.sun.target, this.moon, this.moon.target);
     this.fireLights = [];
-    for (let i = 0; i < 4; i++) {
-      const l = new THREE.PointLight(0xff9a3c, 0, 14, 1.6);
+    for (let i = 0; i < 6; i++) {
+      const l = new THREE.PointLight(0xff9a3c, 0, 16, 1.6);
       this.group.add(l);
       this.fireLights.push(l);
     }
@@ -390,17 +402,22 @@ export class World {
   }
 
   // ── 설치물 ──────────────────────────────────────
-  addStruct([id, t, x, z, rot, hp, lv]) {
+  addStruct([id, t, x, z, rot, hp, lv, open]) {
     if (this.structs.has(id)) return this.structs.get(id);
-    const type = STRUCT_IDS[t], S = STRUCTS[type];
-    const { group, flames } = buildStruct(type, lv);
-    const y = this.terrain.h(x, z);
-    group.position.set(x, y - 0.05, z);
+    const type = STRUCT_IDS[t];
+    const { group, flames, door } = buildStruct(type, lv);
+    const y = baseY(type, x, z, rot, this.terrain, this.cols);
+    group.position.set(x, y, z);
     group.rotation.y = rot;
+    const drop = supportDrop(type, x, z, rot, y, this.terrain);
+    if (drop > 0.05) group.add(buildSupport(type, drop));
     this.group.add(group);
-    const s = { id, type, x, z, y, rot, hp, lv: lv || 0, group, flames, pop: 0 };
-    s.col = S.box ? { x, z, hx: S.box[0], hz: S.box[1], cos: Math.cos(rot), sin: -Math.sin(rot), struct: s } : { x, z, r: S.r, struct: s };
-    this.cols.add(s.col);
+    const s = { id, type, x, z, y, rot, hp, lv: lv || 0, group, flames, door, open: !!open, doorT: open ? 1 : 0, pop: 0 };
+    s.col = structCollider(type, x, z, rot, y);
+    if (s.col) {
+      s.col.struct = s;
+      if (!s.open) this.cols.add(s.col);
+    }
     this.structs.set(id, s);
     return s;
   }
@@ -411,6 +428,17 @@ export class World {
     this.cols.remove(s.col);
     this.group.remove(s.group);
     this.structs.delete(id);
+    return s;
+  }
+
+  setDoor(id, open) {
+    const s = this.structs.get(id);
+    if (!s || !s.col) return null;
+    if (s.open !== open) {
+      s.open = open;
+      if (open) this.cols.remove(s.col);
+      else this.cols.add(s.col);
+    }
     return s;
   }
 
@@ -512,16 +540,20 @@ export class World {
     }
 
     // 모닥불
-    const fires = [...this.structs.values()].filter((s) => s.type === 'campfire');
+    const fires = [...this.structs.values()].filter((s) => STRUCTS[s.type].light);
     fires.sort((a, b) => Math.hypot(a.x - cam.position.x, a.z - cam.position.z) - Math.hypot(b.x - cam.position.x, b.z - cam.position.z));
     this.fireLights.forEach((l, k) => {
       const f = fires[k];
       if (!f) { l.intensity = 0; return; }
-      l.position.set(f.x, f.y + 1.2, f.z);
-      l.intensity = (f.type === 'campfire' ? 3 : 1.5) * (0.35 + 0.65 * this.nightness) * (0.85 + Math.sin(t * 13 + k) * 0.08 + Math.sin(t * 7.3) * 0.07);
+      l.position.set(f.x, f.y + (f.type === 'campfire' ? 1.2 : 2), f.z);
+      l.intensity = STRUCTS[f.type].light * (0.35 + 0.65 * this.nightness) * (0.85 + Math.sin(t * 13 + k) * 0.08 + Math.sin(t * 7.3) * 0.07);
     });
     for (const s of this.structs.values()) {
-      if (s.flames && s.type === 'campfire') {
+      if (s.door) {
+        s.doorT += ((s.open ? 1 : 0) - s.doorT) * Math.min(1, dt * 8);
+        s.door.rotation.y = -s.doorT * 1.75;
+      }
+      if (s.flames) {
         s.flames.scale.set(1 + Math.sin(t * 12 + s.id) * 0.1, 1 + Math.sin(t * 9 + s.id) * 0.18, 1 + Math.cos(t * 11) * 0.1);
         s.flames.rotation.y += dt * 2;
       }

@@ -1,7 +1,9 @@
 // 로우폴리 모델 — 면마다 살짝 다른 색을 칠한 합친 도형(정점 색) + 캐릭터 조립
 import * as THREE from 'three';
 import { mergeGeometries } from '../vendor/three/addons/utils/BufferGeometryUtils.js';
-import { TIER_COLOR, ITEMS } from '../shared/config.js';
+import { RoundedBoxGeometry } from '../vendor/three/addons/geometries/RoundedBoxGeometry.js';
+import { TIER_COLOR, ITEMS, STRUCTS } from '../shared/config.js';
+import { WALL_H } from '../shared/build.js';
 
 const PI = Math.PI;
 export const VC = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
@@ -55,7 +57,11 @@ export function M(list) {
   g.computeBoundingSphere();
   return g;
 }
-const Box = (w, h, d) => new THREE.BoxGeometry(w, h, d);
+// 모서리를 깎은 상자 — 네모난 블록 느낌을 없앤다
+const Box = (w, h, d) => {
+  const r = Math.min(w, h, d) * 0.22;
+  return r < 0.006 ? new THREE.BoxGeometry(w, h, d) : new RoundedBoxGeometry(w, h, d, 1, r);
+};
 const Cyl = (rt, rb, h, seg = 6) => new THREE.CylinderGeometry(rt, rb, h, seg);
 const Cone = (r, h, seg = 6) => new THREE.ConeGeometry(r, h, seg);
 const Ico = (r, d = 0) => new THREE.IcosahedronGeometry(r, d);
@@ -183,6 +189,75 @@ export function buildChest(gold) {
 }
 
 // ── 설치물 ────────────────────────────────────────
+// ── 건축 조각 ─────────────────────────────────────
+const flameMats = new Map();
+function flameMat(color, k) {
+  const key = `${color}:${k}`;
+  if (!flameMats.has(key)) flameMats.set(key, new THREE.MeshBasicMaterial({ color: new THREE.Color(color).multiplyScalar(k) }));
+  return flameMats.get(key);
+}
+function flameGroup(s, y) {
+  const f = new THREE.Group();
+  const a = new THREE.Mesh(Cone(0.3 * s, 0.9 * s, 6), flameMat(0xff8a1f, 2.2));
+  a.position.y = 0.45 * s;
+  const b = new THREE.Mesh(Cone(0.17 * s, 0.6 * s, 5), flameMat(0xffe066, 3));
+  b.position.y = 0.35 * s;
+  f.add(a, b);
+  f.position.y = y;
+  return f;
+}
+function planks(p, x0, x1, y0, y1) {
+  let k = 0;
+  for (let y = y0; y < y1 - 0.02; y += 0.34, k++) {
+    const h = Math.min(0.32, y1 - y);
+    p.push(P(Box(x1 - x0, h, 0.18), ['#b98150', '#a8733f', '#c08a58'][k % 3], { x: (x0 + x1) / 2, y: y + h / 2 }, 0.08, 0.008));
+  }
+}
+// 3m 벽 — 땅속 기초 + 벽면, hole: null | 'window' | 'door'
+function wallParts(kind, hole) {
+  const p = [], H = WALL_H;
+  const HOLE = hole === 'door' ? { hw: 0.6, y0: -1, y1: 2.12 } : hole === 'window' ? { hw: 0.55, y0: 0.87, y1: 1.73 } : null;
+  if (kind === 'wood') {
+    p.push(P(Box(3.0, 1.2, 0.36), '#8e8b87', { y: -0.58 }, 0.15, 0.02));
+    for (const x of [-1.4, 1.4]) p.push(P(Box(0.24, H + 0.1, 0.28), '#7a4e2d', { x, y: H / 2 + 0.05 }, 0.08));
+    p.push(P(Box(3.04, 0.2, 0.3), '#6f4726', { y: H }));
+    if (!HOLE) planks(p, -1.3, 1.3, 0, H - 0.1);
+    else {
+      const w = HOLE.hw + 0.08, bottom = Math.max(0, HOLE.y0);
+      planks(p, -1.3, -w, 0, H - 0.1);
+      planks(p, w, 1.3, 0, H - 0.1);
+      planks(p, -w, w, HOLE.y1 + 0.08, H - 0.1);
+      if (HOLE.y0 > 0) planks(p, -w, w, 0, HOLE.y0 - 0.06);
+      for (const x of [-HOLE.hw - 0.05, HOLE.hw + 0.05]) p.push(P(Box(0.12, HOLE.y1 - bottom + 0.1, 0.26), '#6f4726', { x, y: (HOLE.y1 + bottom) / 2 }));
+      p.push(P(Box(HOLE.hw * 2 + 0.24, 0.14, 0.28), '#6f4726', { y: HOLE.y1 + 0.02 }));
+      if (HOLE.y0 > 0) {
+        p.push(P(Box(HOLE.hw * 2 + 0.3, 0.12, 0.34), '#6f4726', { y: HOLE.y0 - 0.02 }));
+        p.push(P(Box(0.05, HOLE.y1 - HOLE.y0, 0.05), '#4a2f1c', { y: (HOLE.y0 + HOLE.y1) / 2 }), P(Box(HOLE.hw * 2, 0.05, 0.05), '#4a2f1c', { y: (HOLE.y0 + HOLE.y1) / 2 }));
+      }
+    }
+  } else {
+    p.push(P(Box(3.0, 1.2, 0.5), '#76736e', { y: -0.58 }, 0.15, 0.03));
+    const rows = 6, rh = H / rows, tone = ['#aeaba4', '#9f9d97', '#918e89'];
+    for (let r = 0; r < rows; r++) {
+      const cy = (r + 0.5) * rh, off = r % 2 ? 0.375 : 0;
+      for (let c = -1; c < 5; c++) {
+        const a = Math.max(-1.5, -1.5 + c * 0.75 + off), b = Math.min(1.5, -1.5 + (c + 1) * 0.75 + off);
+        const segs = HOLE && cy > HOLE.y0 && cy < HOLE.y1 ? [[a, Math.min(b, -HOLE.hw)], [Math.max(a, HOLE.hw), b]] : [[a, b]];
+        for (const [s0, s1] of segs) if (s1 - s0 > 0.08) p.push(P(Box(s1 - s0 - 0.035, rh - 0.04, 0.46), tone[(r * 7 + c * 3 + 9) % 3], { x: (s0 + s1) / 2, y: cy }, 0.1, 0.012));
+      }
+    }
+    p.push(P(Box(3.04, 0.12, 0.5), '#85827c', { y: H + 0.04 }));
+    if (HOLE) {
+      p.push(P(Box(HOLE.hw * 2 + 0.3, 0.18, 0.52), '#7d7a76', { y: HOLE.y1 + 0.05 }));
+      if (HOLE.y0 > 0) {
+        p.push(P(Box(HOLE.hw * 2 + 0.3, 0.12, 0.56), '#7d7a76', { y: HOLE.y0 - 0.02 }));
+        p.push(P(Box(0.06, HOLE.y1 - HOLE.y0, 0.06), '#3d4148', { y: (HOLE.y0 + HOLE.y1) / 2 }), P(Box(HOLE.hw * 2, 0.06, 0.06), '#3d4148', { y: (HOLE.y0 + HOLE.y1) / 2 }));
+      }
+    }
+  }
+  return p;
+}
+
 export function buildStruct(type, lv = 1) {
   const g = new THREE.Group();
   const add = (geo) => {
@@ -191,7 +266,7 @@ export function buildStruct(type, lv = 1) {
     g.add(m);
     return m;
   };
-  let flames = null;
+  let flames = null, door = null;
   switch (type) {
     case 'workbench': {
       const L = Math.max(1, Math.min(4, lv || 1)), T = L >= 2 ? 1.02 : 0.93; // T: 상판 윗면 높이
@@ -255,33 +330,146 @@ export function buildStruct(type, lv = 1) {
       g.add(flames);
       break;
     }
-    case 'wood_wall': add(cached('s:wood_wall', () => {
-      const parts = [];
-      for (let k = 0; k < 6; k++) {
-        const h = 2.2 + ((k * 37) % 5) * 0.07, x = -1.25 + k * 0.5;
-        parts.push(P(Box(0.46, h, 0.3), k % 2 ? '#a8733f' : '#96643a', { x, y: h / 2 }));
-        parts.push(P(Cone(0.26, 0.38, 4), '#8a5a33', { x, y: h + 0.19, ry: PI / 4 }));
+    case 'wood_wall':
+    case 'stone_wall':
+    case 'wood_window':
+    case 'stone_window':
+      add(cached(`s:${type}`, () => M(wallParts(type.startsWith('wood') ? 'wood' : 'stone', type.endsWith('window') ? 'window' : null))));
+      break;
+    case 'wood_door':
+    case 'iron_door': {
+      const iron = type === 'iron_door';
+      add(cached(`s:${type}`, () => M(wallParts(iron ? 'stone' : 'wood', 'door'))));
+      door = new THREE.Group();
+      door.position.set(-0.6, 0.02, 0);
+      g.add(door);
+      const leaf = new THREE.Mesh(cached(`leaf:${type}`, () => M(iron ? [
+        P(Box(1.18, 2.04, 0.12), '#7b828c', { x: 0.6, y: 1.03 }, 0.06),
+        ...[0.35, 1.03, 1.7].map((y) => P(Box(1.2, 0.12, 0.16), '#555b63', { x: 0.6, y })),
+        ...[0.12, 0.6, 1.08].flatMap((x) => [0.35, 1.7].map((y) => P(Sph(0.03, 6, 4), '#dfe3e8', { x, y, z: 0.085 }, 0))),
+        P(new THREE.TorusGeometry(0.07, 0.018, 5, 10), '#d4a93a', { x: 1.0, y: 1.0, z: 0.1 }),
+      ] : [
+        ...[0.15, 0.45, 0.75, 1.05].map((x, k) => P(Box(0.29, 2.04, 0.09), k % 2 ? '#a8733f' : '#b98150', { x, y: 1.03 }, 0.08)),
+        P(Box(1.16, 0.13, 0.06), '#6f4726', { x: 0.6, y: 0.5, z: 0.07 }),
+        P(Box(1.16, 0.13, 0.06), '#6f4726', { x: 0.6, y: 1.6, z: 0.07 }),
+        P(Box(0.12, 1.25, 0.05), '#6f4726', { x: 0.6, y: 1.05, z: 0.07, rz: -0.72 }),
+        P(Sph(0.055, 8, 6), '#d4a93a', { x: 1.02, y: 1.0, z: 0.1 }),
+      ])), VC);
+      leaf.castShadow = leaf.receiveShadow = true;
+      door.add(leaf);
+      break;
+    }
+    case 'fence': add(cached('s:fence', () => M([
+      ...[-1.38, 0, 1.38].flatMap((x) => [P(Box(0.16, 1.5, 0.16), '#8a5a33', { x, y: 0.4 }, 0.08), P(Cone(0.12, 0.2, 4), '#7a4e2d', { x, y: 1.25, ry: PI / 4 })]),
+      P(Box(3.0, 0.14, 0.08), '#b98150', { y: 0.45, z: 0.1 }, 0.08),
+      P(Box(3.0, 0.14, 0.08), '#a8733f', { y: 0.9, z: 0.1 }, 0.08),
+    ])));
+      break;
+    case 'wood_floor': add(cached('s:wood_floor', () => M([
+      ...[-1.2, 1.2].flatMap((x) => [-1.2, 1.2].map((z) => P(Box(0.26, 1.4, 0.26), '#6f4726', { x, y: -0.62, z }))),
+      P(Box(2.9, 0.14, 0.2), '#6f4726', { z: -1.2 }),
+      P(Box(2.9, 0.14, 0.2), '#6f4726', { z: 1.2 }),
+      ...[0, 1, 2, 3, 4, 5].map((k) => P(Box(0.49, 0.12, 2.98), ['#b98150', '#a8733f', '#c08a58'][k % 3], { x: -1.25 + k * 0.5, y: 0.14 }, 0.08, 0.006)),
+    ])));
+      break;
+    case 'stone_floor': add(cached('s:stone_floor', () => {
+      const parts = [P(Box(3.0, 1.2, 3.0), '#7d7a76', { y: -0.5 }, 0.12, 0.02)];
+      for (let i = 0; i < 4; i++) {
+        for (let j = 0; j < 4; j++) parts.push(P(Box(0.72, 0.14, 0.72), ['#b3b0a9', '#a6a39e', '#9c9a95'][(i * 3 + j * 5) % 3], { x: -1.125 + i * 0.75, y: 0.15, z: -1.125 + j * 0.75 }, 0.1, 0.01));
       }
-      parts.push(P(Box(3.05, 0.18, 0.12), '#6f4726', { y: 0.7, z: 0.2 }));
-      parts.push(P(Box(3.05, 0.18, 0.12), '#6f4726', { y: 1.7, z: 0.2 }));
       return M(parts);
     }));
       break;
-    case 'stone_wall': add(cached('s:stone_wall', () => {
-      const parts = [];
-      for (let row = 0; row < 4; row++) {
-        let x = -1.5 + (row % 2) * 0.25;
-        while (x < 1.5) {
-          const w = Math.min(1.5 - x, 0.55 + ((row * 7 + Math.round(x * 10)) % 4) * 0.12);
-          parts.push(P(Box(w - 0.04, 0.6, 0.55), ['#9a9894', '#8b8985', '#a6a39e'][(row + Math.round(x * 3)) % 3], { x: x + w / 2, y: 0.32 + row * 0.62 }, 0.12, 0.02));
-          x += w;
+    case 'wood_roof':
+    case 'stone_roof': {
+      const stone = type === 'stone_roof';
+      add(cached(`s:${type}`, () => M([
+        P(Box(3.1, 0.14, 3.1), stone ? '#8a8781' : '#6f4726', { y: 0.07 }),
+        P(Cone(2.45, 1.25, 4), stone ? '#c4553a' : '#9c5a2c', { y: 0.765, ry: PI / 4 }, 0.1, 0.02),
+        P(Cyl(0.08, 0.1, 0.3, 6), stone ? '#8e2f1c' : '#6f4726', { y: 1.45 }),
+      ])));
+      break;
+    }
+    case 'torch':
+      add(cached('s:torch', () => M([
+        ...[0, 1, 2, 3].map((k) => P(Dode(0.13), '#8e8b87', { x: Math.cos(k * 1.57 + 0.4) * 0.2, y: 0.06, z: Math.sin(k * 1.57 + 0.4) * 0.2 }, 0.2, 0.03)),
+        P(Cyl(0.045, 0.06, 1.7, 6), '#7a4e2d', { y: 0.85 }),
+        P(Cyl(0.1, 0.08, 0.26, 7), '#4a2f1c', { y: 1.68 }),
+      ])));
+      flames = flameGroup(0.55, 1.82);
+      g.add(flames);
+      break;
+    case 'lantern':
+      add(cached('s:lantern', () => M([
+        P(Box(0.5, 0.14, 0.5), '#555b63', { y: 0.07 }),
+        P(Box(0.13, 2.3, 0.13), '#4a2f1c', { y: 1.15 }),
+        P(Box(0.75, 0.1, 0.1), '#555b63', { x: 0.32, y: 2.25 }),
+        P(Cyl(0.015, 0.015, 0.2, 4), '#3d4148', { x: 0.62, y: 2.1 }),
+        P(Cone(0.24, 0.18, 6), '#555b63', { x: 0.62, y: 1.93 }),
+        P(Cyl(0.19, 0.19, 0.06, 6), '#555b63', { x: 0.62, y: 1.5 }),
+        ...[0, 1, 2, 3, 4, 5].map((k) => P(Box(0.025, 0.36, 0.025), '#3d4148', { x: 0.62 + Math.cos(k * 1.047) * 0.17, y: 1.7, z: Math.sin(k * 1.047) * 0.17 })),
+      ])));
+      flames = new THREE.Mesh(cached('lantern-glow', () => Cyl(0.14, 0.14, 0.32, 6)), flameMat(0xffc45a, 3));
+      flames.position.set(0.62, 1.7, 0);
+      g.add(flames);
+      break;
+    case 'bed': add(cached('s:bed', () => M([
+      P(Box(1.3, 0.3, 2.2), '#8a5a33', { y: 0.3 }, 0.08),
+      ...[[-0.58, -1.02], [0.58, -1.02], [-0.58, 1.02], [0.58, 1.02]].map(([x, z]) => P(Box(0.14, 0.3, 0.14), '#6f4726', { x, y: 0.15, z })),
+      P(Box(1.2, 0.22, 2.0), '#f4efe3', { y: 0.55 }, 0.04),
+      P(Box(1.26, 0.2, 1.3), '#c93a2b', { y: 0.62, z: 0.35 }, 0.06, 0.01),
+      P(Box(1.28, 0.06, 0.12), '#f4efe3', { y: 0.72, z: -0.28 }),
+      P(Box(0.8, 0.16, 0.38), '#ffffff', { y: 0.74, z: -0.72 }, 0.04, 0.01),
+      P(Box(1.4, 1.0, 0.14), '#7a4e2d', { y: 0.65, z: -1.1 }, 0.08),
+      P(Box(1.4, 0.55, 0.12), '#7a4e2d', { y: 0.42, z: 1.1 }, 0.08),
+    ])));
+      break;
+    case 'table': add(cached('s:table', () => M([
+      P(Cyl(0.75, 0.75, 0.1, 12), '#b98150', { y: 0.84 }, 0.06),
+      P(Cyl(0.78, 0.7, 0.06, 12), '#8a5a33', { y: 0.77 }),
+      P(Cyl(0.08, 0.12, 0.76, 7), '#7a4e2d', { y: 0.4 }),
+      P(Cyl(0.42, 0.48, 0.08, 10), '#6f4726', { y: 0.04 }),
+      P(Cyl(0.08, 0.07, 0.16, 8), '#f4efe3', { x: 0.3, y: 0.97, z: 0.1 }),
+      P(Cyl(0.18, 0.2, 0.04, 10), '#e8dcc0', { x: -0.25, y: 0.91, z: -0.2 }),
+      P(Sph(0.08, 7, 5), '#e53935', { x: -0.25, y: 0.99, z: -0.2 }),
+    ])));
+      break;
+    case 'chair': add(cached('s:chair', () => M([
+      P(Box(0.62, 0.1, 0.6), '#b98150', { y: 0.5 }, 0.06),
+      ...[[-0.25, -0.24], [0.25, -0.24], [-0.25, 0.24], [0.25, 0.24]].map(([x, z]) => P(Box(0.08, 0.5, 0.08), '#7a4e2d', { x, y: 0.25, z })),
+      P(Box(0.08, 0.7, 0.08), '#7a4e2d', { x: -0.25, y: 0.9, z: -0.26 }),
+      P(Box(0.08, 0.7, 0.08), '#7a4e2d', { x: 0.25, y: 0.9, z: -0.26 }),
+      P(Box(0.6, 0.14, 0.06), '#a8733f', { y: 1.15, z: -0.26 }),
+      P(Box(0.6, 0.1, 0.06), '#a8733f', { y: 0.85, z: -0.26 }),
+    ])));
+      break;
+    case 'spikes': add(cached('s:spikes', () => {
+      const parts = [P(Box(2.5, 0.12, 2.5), '#7a4e2d', { y: 0.06 }, 0.1, 0.01)];
+      for (let i = 0; i < 4; i++) {
+        for (let j = 0; j < 4; j++) {
+          const x = -0.93 + i * 0.62, z = -0.93 + j * 0.62;
+          parts.push(P(Cyl(0.07, 0.08, 0.1, 6), '#555b63', { x, y: 0.16, z }), P(Cone(0.075, 0.55, 5), '#c9ced6', { x, y: 0.47, z }, 0.08));
         }
       }
       return M(parts);
     }));
       break;
   }
-  return { group: g, flames };
+  return { group: g, flames, door };
+}
+
+// 비탈 받침 — 기초 아래(y -1.0)에서 drop 만큼 땅으로 내려간다
+export function buildSupport(type, drop) {
+  const stone = type.startsWith('stone') || type === 'iron_door';
+  const floor = STRUCTS[type].snap === 'floor';
+  const geo = cached(`support:${floor ? 'f' : 'w'}:${stone ? 's' : 'w'}`, () => M(floor
+    ? (stone ? [P(Box(3, 1, 3), '#76736e', { y: -0.5 }, 0.12)] : [-1.2, 1.2].flatMap((x) => [-1.2, 1.2].map((z) => P(Box(0.26, 1, 0.26), '#6f4726', { x, y: -0.5, z }))))
+    : [P(Box(3, 1, stone ? 0.5 : 0.36), stone ? '#76736e' : '#8e8b87', { y: -0.5 }, 0.12)]));
+  const m = new THREE.Mesh(geo, VC);
+  m.position.y = -1.0;
+  m.scale.y = drop;
+  m.castShadow = m.receiveShadow = true;
+  return m;
 }
 
 // ── 난파선 ────────────────────────────────────────
@@ -331,56 +519,108 @@ export function buildBoat() {
 }
 
 // ── 아이템 (손잡이가 원점, +y 방향으로 뻗음) ───────
+// 판 모양을 두께 있게 뽑아낸 도형 (칼날·도끼날·곡괭이 머리)
+const Ext = (shape, depth, bevel) => {
+  const g = new THREE.ExtrudeGeometry(shape, { depth, bevelEnabled: true, bevelThickness: bevel, bevelSize: bevel * 0.8, bevelSegments: 1, curveSegments: 8 });
+  g.translate(0, 0, -depth / 2);
+  return g;
+};
+const poly = (pts) => {
+  const s = new THREE.Shape();
+  s.moveTo(pts[0][0], pts[0][1]);
+  for (let i = 1; i < pts.length; i++) s.lineTo(pts[i][0], pts[i][1]);
+  s.closePath();
+  return s;
+};
+function axeHead() {
+  const s = new THREE.Shape();
+  s.moveTo(-0.05, -0.06);
+  s.lineTo(0.1, -0.075);
+  s.quadraticCurveTo(0.19, -0.09, 0.25, -0.2);
+  s.quadraticCurveTo(0.37, 0, 0.25, 0.2);
+  s.quadraticCurveTo(0.19, 0.09, 0.1, 0.075);
+  s.lineTo(-0.05, 0.06);
+  s.closePath();
+  return s;
+}
+function pickHead() {
+  const top = [], bot = [];
+  for (let i = 0; i <= 12; i++) {
+    const t = -1 + i / 6, y = 0.05 - 0.12 * t * t;
+    top.push([0.39 * t, y]);
+    bot.push([0.39 * t, y - (0.08 * Math.pow(1 - Math.abs(t), 0.75) + 0.008)]);
+  }
+  return poly([...top, ...bot.reverse()]);
+}
+
+// 활 — 손잡이 (-0.3, 0). 가지는 시위 쪽(+x)으로 휘고 끝은 앞으로 살짝 젖힌다. 시위는 끝과 끝을 잇는다
+function taperSegs(parts, pts, r0, r1, color) {
+  const n = pts.length - 1;
+  for (let i = 0; i < n; i++) {
+    const a = pts[i], b = pts[i + 1], d = new THREE.Vector3().subVectors(b, a), len = d.length();
+    const e = new THREE.Euler().setFromQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.normalize()));
+    const ra = r0 + (r1 - r0) * (i / n), rb = r0 + (r1 - r0) * ((i + 1) / n);
+    parts.push(P(Cyl(rb, ra, len * 1.06, 7), color, { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, z: (a.z + b.z) / 2, rx: e.x, ry: e.y, rz: e.z }, 0.04));
+  }
+}
+function bowGeometry() {
+  const parts = [];
+  let tipX = 0;
+  for (const s of [1, -1]) {
+    const pts = [];
+    for (let i = 0; i <= 10; i++) {
+      const t = i / 10;
+      const flick = Math.max(0, (t - 0.72) / 0.28);
+      pts.push(new THREE.Vector3(-0.3 + 0.27 * t * t - 0.075 * flick * flick, s * (0.09 + 0.39 * t), 0));
+    }
+    taperSegs(parts, pts, 0.03, 0.01, '#8f5a2e');
+    taperSegs(parts, pts.slice(1, 8).map((p) => new THREE.Vector3(p.x - 0.018, p.y, 0)), 0.012, 0.007, '#c98c4f');
+    const tip = pts[10];
+    tipX = tip.x;
+    parts.push(P(Sph(0.018, 7, 5), '#efe6cf', { x: tip.x, y: tip.y + s * 0.008 }, 0));
+  }
+  parts.push(
+    P(Cyl(0.036, 0.036, 0.2, 9), '#4a2f1c', { x: -0.3 }, 0.05),
+    ...[-0.07, 0, 0.07].map((y) => P(Cyl(0.04, 0.04, 0.018, 9), '#c9a26b', { x: -0.3, y }, 0)),
+    P(Box(0.03, 0.03, 0.05), '#6f4726', { x: -0.27, y: 0.11 }),
+    P(Cyl(0.0045, 0.0045, 0.97, 4), '#f4efe3', { x: tipX }, 0),
+  );
+  return M(parts);
+}
+
 export function itemGeometry(id) {
   return cached(`item:${id}`, () => {
+    if (id === 'bow') return bowGeometry(); // 해골 궁수가 드는 활
     const I = ITEMS[id] || {};
     const tc = TIER_COLOR[I.tier] || '#cccccc';
     const band = (ys) => ys.map((y) => P(Cyl(0.04, 0.04, 0.03, 6), '#4a2f1c', { y }));
     const hot = I.tier >= 3 ? '#e8b923' : shade(tc, 0.62);
     switch (I.kind) {
       case 'sword': return M([
-        P(Cyl(0.032, 0.03, 0.22, 6), '#5a3a22', { y: 0.1 }),
-        ...band([0.03, 0.1, 0.17]),
-        P(Oct(0.05), hot, { y: -0.03, sy: 1.3 }),
-        P(Box(0.3, 0.05, 0.09), hot, { y: 0.23 }),
-        P(Box(0.05, 0.09, 0.1), hot, { x: 0.16, y: 0.25 }),
-        P(Box(0.05, 0.09, 0.1), hot, { x: -0.16, y: 0.25 }),
-        P(Box(0.1, 0.62, 0.024), tc, { y: 0.57 }, 0.05),
-        P(Box(0.022, 0.56, 0.032), shade(tc, 0.7), { y: 0.55 }),
-        P(Box(0.016, 0.62, 0.02), shade(tc, 1.3), { x: 0.05, y: 0.57 }, 0),
-        P(Box(0.016, 0.62, 0.02), shade(tc, 1.3), { x: -0.05, y: 0.57 }, 0),
-        P(Cone(0.071, 0.17, 4), tc, { y: 0.965, ry: PI / 4, sz: 0.35 }),
-        ...(I.tier >= 4 ? [P(Oct(0.035), '#bffcff', { y: 0.23, z: 0.05 }, 0), P(Oct(0.035), '#bffcff', { y: 0.23, z: -0.05 }, 0)] : []),
+        P(Cyl(0.032, 0.028, 0.24, 7), '#5a3a22', { y: 0.1 }),
+        ...band([0.02, 0.1, 0.18]),
+        P(Sph(0.05, 8, 6), hot, { y: -0.04 }),
+        P(Cap(0.038, 0.24, 6), hot, { y: 0.24, rz: PI / 2 }),
+        P(Sph(0.055, 8, 6), hot, { y: 0.245, sz: 0.8 }),
+        P(Ext(poly([[-0.055, 0], [0.055, 0], [0.05, 0.6], [0, 0.76], [-0.05, 0.6]]), 0.012, 0.013), tc, { y: 0.27 }, 0.04),
+        P(Ext(poly([[-0.013, 0.03], [0.013, 0.03], [0.013, 0.55], [0, 0.61], [-0.013, 0.55]]), 0.03, 0.004), shade(tc, 1.22), { y: 0.27 }, 0),
+        ...(I.tier >= 4 ? [P(Oct(0.035), '#bffcff', { y: 0.245, z: 0.055 }, 0), P(Oct(0.035), '#bffcff', { y: 0.245, z: -0.055 }, 0)] : []),
       ]);
       case 'axe': return M([
-        P(Cyl(0.03, 0.036, 0.8, 6), '#8a5a33', { y: 0.32 }),
+        P(Cyl(0.03, 0.036, 0.8, 7), '#8a5a33', { y: 0.32 }),
         ...band([0.0, 0.07]),
-        P(Box(0.1, 0.13, 0.08), shade(tc, 0.72), { x: -0.02, y: 0.64 }),
-        P(Box(0.2, 0.22, 0.05), tc, { x: 0.13, y: 0.64 }, 0.06),
-        P(Box(0.07, 0.36, 0.055), tc, { x: 0.25, y: 0.64 }, 0.06),
-        P(Box(0.025, 0.38, 0.062), shade(tc, 1.35), { x: 0.29, y: 0.64 }, 0),
-        P(Cone(0.05, 0.13, 4), shade(tc, 0.72), { x: -0.13, y: 0.64, rz: PI / 2 }),
-        P(Box(0.03, 0.06, 0.086), hot, { x: 0.03, y: 0.64 }),
+        P(Cyl(0.052, 0.052, 0.17, 7), shade(tc, 0.72), { y: 0.64 }),
+        P(Ext(axeHead(), 0.035, 0.016), tc, { y: 0.64 }, 0.04),
+        P(Cone(0.045, 0.12, 5), shade(tc, 0.72), { x: -0.1, y: 0.64, rz: PI / 2 }),
+        P(Cyl(0.056, 0.056, 0.03, 7), hot, { y: 0.56 }),
       ]);
       case 'pick': return M([
-        P(Cyl(0.03, 0.036, 0.8, 6), '#8a5a33', { y: 0.32 }),
+        P(Cyl(0.03, 0.036, 0.8, 7), '#8a5a33', { y: 0.32 }),
         ...band([0.0, 0.07]),
-        P(Box(0.12, 0.13, 0.09), shade(tc, 0.72), { y: 0.68 }),
-        P(Box(0.4, 0.08, 0.065), tc, { y: 0.69 }, 0.06),
-        P(Cone(0.045, 0.28, 4), shade(tc, 1.15), { x: 0.31, y: 0.64, rz: -PI / 2 - 0.4 }),
-        P(Cone(0.045, 0.28, 4), shade(tc, 1.15), { x: -0.31, y: 0.64, rz: PI / 2 + 0.4 }),
-        P(Box(0.13, 0.03, 0.095), hot, { y: 0.62 }),
+        P(Cyl(0.055, 0.055, 0.15, 7), shade(tc, 0.72), { y: 0.65 }),
+        P(Ext(pickHead(), 0.05, 0.013), tc, { y: 0.67 }, 0.04),
+        P(Cyl(0.058, 0.058, 0.03, 7), hot, { y: 0.575 }),
       ]);
-      case 'bow': {
-        const arc = new THREE.TorusGeometry(0.46, 0.028, 5, 16, PI * 0.92);
-        return M([
-          P(arc, '#8a5a33', { x: -0.3, y: 0.0, rz: -PI * 0.46 }),
-          P(Cyl(0.006, 0.006, 0.9, 3), '#f2ecdc', { x: 0.14, y: 0.0 }, 0),
-          P(Cyl(0.045, 0.045, 0.18, 6), '#3d2a1a', { x: -0.3, y: 0.0 }),
-          P(Cyl(0.05, 0.05, 0.03, 6), '#e8413a', { x: -0.3, y: 0.1 }),
-          P(Cyl(0.05, 0.05, 0.03, 6), '#e8413a', { x: -0.3, y: -0.1 }),
-        ]);
-      }
     }
     switch (id) {
       case 'apple': return M([P(Sph(0.13, 8, 6), '#e53935', { y: 0.13 }), P(Cyl(0.012, 0.012, 0.08, 4), '#5a3a22', { y: 0.29 }), P(Box(0.08, 0.02, 0.05), '#4caf50', { x: 0.05, y: 0.29, rz: 0.4 })]);
@@ -415,7 +655,7 @@ export function buildItem(id) {
   const I = ITEMS[id];
   if (I && I.cat === 'place') {
     const { group } = buildStruct(I.struct);
-    const s = I.struct.includes('wall') ? 0.12 : 0.22;
+    const s = STRUCTS[I.struct].snap ? 0.09 : ['bed', 'table', 'lantern'].includes(I.struct) ? 0.16 : 0.22;
     group.scale.setScalar(s);
     const holder = new THREE.Group();
     holder.add(group);
@@ -502,23 +742,54 @@ export function buildPlayer(color) {
   return { root, bodyG, footL, footR, handL, handR, mount };
 }
 
+// 1인칭 손 — 두 자세
+//  grip: +y 축이 손잡이 방향, 둥근 손가락 고리가 감싸 쥔다 (도구·무기·활)
+//  palm: 손바닥을 위로 펴고 음식·설치물을 올려 든다
+function armParts(color, from, dir, skin) {
+  const eul = new THREE.Euler().setFromQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir));
+  const seg = (start, len) => {
+    const k = start + len / 2;
+    return { x: from[0] + dir.x * k, y: from[1] + dir.y * k, z: from[2] + dir.z * k, rx: eul.x, ry: eul.y, rz: eul.z };
+  };
+  return [
+    P(Cyl(0.04, 0.047, 0.11, 12), skin, seg(0, 0.11), 0.03),
+    P(Cyl(0.047, 0.056, 0.15, 12), skin, seg(0.1, 0.15), 0.03),
+    P(new THREE.TorusGeometry(0.058, 0.016, 6, 14), shade(color, 0.75), { ...seg(0.25, 0), rx: eul.x + PI / 2 }, 0.03),
+    P(Cyl(0.06, 0.074, 0.42, 12), color, seg(0.25, 0.42), 0.05),
+  ];
+}
+
 export function buildViewHand(color) {
   const g = new THREE.Group();
-  const skin = '#f2c28f', a = 0.35, rx = PI / 2 + a;
-  // 주먹(원점)에서 카메라 쪽 아래로 뻗는 팔
-  const along = (d) => ({ y: -Math.sin(a) * d, z: Math.cos(a) * d, rx });
-  const hand = new THREE.Mesh(cached(`vhand:${color}`, () => M([
-    P(Box(0.11, 0.1, 0.13), skin, {}, 0.06, 0.008),
-    P(Box(0.116, 0.035, 0.035), shade(skin, 0.88), { y: 0.022, z: -0.062 }, 0.04),
-    P(Box(0.04, 0.045, 0.075), shade(skin, 0.93), { x: -0.066, y: -0.006, z: -0.012 }, 0.04),
-    P(Cyl(0.045, 0.056, 0.17, 6), shade(skin, 0.95), along(0.15), 0.05),
-    P(Cyl(0.078, 0.078, 0.055, 7), shade(color, 0.72), along(0.245), 0.05),
-    P(Cyl(0.082, 0.104, 0.52, 7), color, { ...along(0.53), x: 0.01 }, 0.08),
-  ])), VC);
-  g.add(hand);
+  const skin = '#f2c28f', skinD = shade(skin, 0.9);
+
+  const grip = new THREE.Group();
+  g.add(grip);
+  const ring = (y, i) => P(new THREE.TorusGeometry(0.032, 0.021 - i * 0.001, 6, 12, PI * 1.17), i % 2 ? skinD : skin, { y, rx: PI / 2, rz: 2.62 }, 0.03);
+  grip.add(new THREE.Mesh(cached(`vhand3:${color}`, () => M([
+    P(Ico(0.055, 1), skin, { x: 0.036, y: 0.002, z: 0.022, sx: 0.78, sy: 1.18, sz: 0.95 }, 0.04),
+    ...[0.044, 0.015, -0.014, -0.042].map(ring),
+    P(Cap(0.021, 0.046, 8), skinD, { x: -0.012, y: 0.06, z: 0.036, rz: PI / 2, ry: -0.55 }, 0.03),
+    ...armParts(color, [0.02, -0.05, 0.01], new THREE.Vector3(0.55, -0.85, 0.5).normalize(), skin),
+  ])), VC));
   const mount = new THREE.Group();
-  g.add(mount);
-  return { group: g, hand, mount };
+  grip.add(mount);
+
+  const palm = new THREE.Group();
+  g.add(palm);
+  const fx = [-0.036, -0.012, 0.012, 0.035];
+  palm.add(new THREE.Mesh(cached(`vpalm:${color}`, () => M([
+    P(Ico(0.056, 1), skin, { sx: 1.05, sy: 0.42, sz: 1.1 }, 0.04),
+    ...fx.map((x, i) => P(Cap(0.0125, 0.034 - Math.abs(i - 1.5) * 0.005, 8), i % 2 ? skinD : skin, { x, y: 0.004, z: -0.078, rx: PI / 2 }, 0.03)),
+    ...fx.map((x, i) => P(Cap(0.0115, 0.02, 8), skinD, { x, y: 0.02, z: -0.106 + Math.abs(i - 1.5) * 0.007, rx: PI / 2 - 0.9 }, 0.03)),
+    P(Cap(0.014, 0.036, 8), skinD, { x: -0.066, y: 0.014, z: -0.02, rz: 0.9, ry: 0.5 }, 0.03),
+    ...armParts(color, [0.012, -0.012, 0.05], new THREE.Vector3(0.45, -0.5, 0.74).normalize(), skin),
+  ])), VC));
+  const palmMount = new THREE.Group();
+  palmMount.position.set(0, 0.018, -0.03);
+  palm.add(palmMount);
+
+  return { group: g, grip, mount, palm, palmMount };
 }
 
 const ENEMY_PAL = {

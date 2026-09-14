@@ -66,6 +66,7 @@ export class Colliders {
 export function resolve(b, cols) {
   let hit = null;
   cols.query(b.x, b.z, b.radius + 3, (c) => {
+    if (c.plat !== undefined) return;
     if (c.r !== undefined) {
       if (c.r <= 0) return;
       const dx = b.x - c.x, dz = b.z - c.z, rr = c.r + b.radius, d2 = dx * dx + dz * dz;
@@ -125,7 +126,12 @@ export function moveBody(b, dt, terrain, cols) {
     }
     b.vy -= PLAYER.gravity * h;
     b.y += b.vy * h;
-    const ground = Math.max(DEEP, terrain.h(b.x, b.z));
+    let ground = Math.max(DEEP, terrain.h(b.x, b.z));
+    cols.query(b.x, b.z, 0.1, (c) => {
+      if (c.plat === undefined || c.plat <= ground || b.y < c.plat - 0.7) return;
+      const dx = b.x - c.x, dz = b.z - c.z;
+      if (Math.abs(dx * c.cos + dz * c.sin) <= c.hx && Math.abs(-dx * c.sin + dz * c.cos) <= c.hz) ground = c.plat;
+    });
     if (b.y <= ground) {
       b.y = ground;
       if (b.vy < 0) b.vy = 0;

@@ -1,6 +1,6 @@
 // 화면 UI — 체력·기력·배고픔, 시계, 코인, 핫바, 능력, 알림, 미니맵·지도, 제작창, 배 수리창, 결과
 import {
-  ITEMS, POWERUPS, RARITY, RECIPES, BENCH, BENCH_MAX, BOAT_PARTS, CYCLE, ENEMIES, PLAYER, hotbarList,
+  ITEMS, POWERUPS, RARITY, RECIPES, SECTIONS, BENCH, BENCH_MAX, BOAT_PARTS, CYCLE, ENEMIES, PLAYER, hotbarList,
 } from '../shared/config.js';
 import { HALF, SIZE, RES } from '../shared/terrain.js';
 
@@ -8,7 +8,7 @@ const $ = (id) => document.getElementById(id);
 export const icon = (id) => `assets/icons/${id}.svg`;
 export const esc = (s) => String(s).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 const CYCLE_LEN = CYCLE.day + CYCLE.night;
-const INV_ORDER = ['wood', 'stone', 'iron_ore', 'mithril_ore', 'apple', 'raw_meat', 'cooked_meat', 'arrow'];
+const INV_ORDER = ['wood', 'stone', 'iron_ore', 'mithril_ore', 'apple', 'raw_meat', 'cooked_meat'];
 // 같은 종류 장비끼리 비교: [종류, 등급]
 const rank = (I) => (I ? [I.kind || (I.armor ? 'armor' : ''), I.tier || I.armor || 0] : ['', 0]);
 
@@ -92,11 +92,11 @@ export class HUD {
     const slot = (id, key, on) => {
       const I = ITEMS[id];
       let count = '';
-      if (id === 'bow') count = inv.arrow || 0;
-      else if (I.cat === 'food' || I.cat === 'place') count = inv[id];
+      if (I.cat === 'food' || I.cat === 'place') count = inv[id];
       return `<div class="slot${on ? ' on' : ''}" title="${esc(I.name)}"><kbd>${key}</kbd><img src="${icon(id)}" alt="">${count !== '' ? `<b>${count}</b>` : ''}<span>${esc(I.name)}</span></div>`;
     };
-    $('hotbar').innerHTML = slot('fist', '`', !sel) + list.slice(0, 9).map((id, i) => slot(id, i + 1, id === sel)).join('');
+    $('hotbar').innerHTML = slot('fist', '`', !sel) + list.map((id, i) => slot(id, i < 9 ? i + 1 : '', id === sel)).join('');
+    $('hotbar').classList.toggle('many', list.length > 9);
   }
 
   clock(clock, day) {
@@ -374,12 +374,16 @@ export class HUD {
       if (!need) open.push(R);
       else locked.set(need, [...(locked.get(need) || []), R]);
     }
-    $('recipeList').innerHTML = open.map((R) => {
+    const card = (R) => {
       const I = ITEMS[R.id], ok = enough(R.cost), ownedN = inv[R.id] || 0;
       return `<div class="rc${ok ? ' can' : ''}" data-r="${R.id}">
         <img class="rc-icon" src="${icon(R.id)}" alt="">
         <div class="rc-info"><b>${esc(I.name)}${R.n ? ` ×${R.n}` : ''}</b>${ownedN ? `<em>보유 ${ownedN}</em>` : ''}<small>${esc(I.desc || '')}</small><div class="rc-costs">${costHtml(R.cost)}</div></div>
         <button class="btn small" ${ok ? '' : 'disabled'}>제작</button></div>`;
+    };
+    $('recipeList').innerHTML = SECTIONS.map(([sec, title]) => {
+      const list = open.filter((R) => R.sec === sec);
+      return list.length ? `<h4 class="sec">${title}</h4>${list.map(card).join('')}` : '';
     }).join('') || '<p class="empty">지금 만들 수 있는 것이 없어요.</p>';
     $('lockedList').innerHTML = [...locked].map(([need, list]) => `<div class="lk"><span><img src="${icon('lock')}" alt="">${esc(need)}</span>${list.map((R) => `<img src="${icon(R.id)}" alt="" title="${esc(ITEMS[R.id].name)}">`).join('')}</div>`).join('');
   }

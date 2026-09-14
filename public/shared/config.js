@@ -31,15 +31,28 @@ export const ITEMS = {
   apple: { name: '사과', cat: 'food', food: { hunger: 14, hp: 6 }, desc: '배고픔 +14, 체력 +6' },
   raw_meat: { name: '날고기', cat: 'food', food: { hunger: 9, hp: 0 }, desc: '배고픔 +9. 모닥불에 구우면 훨씬 좋다' },
   cooked_meat: { name: '구운 고기', cat: 'food', food: { hunger: 40, hp: 24 }, desc: '배고픔 +40, 체력 +24' },
-  arrow: { name: '화살', cat: 'ammo', desc: '활로 쏜다' },
   fist: { name: '맨손', cat: 'tool', kind: 'fist', tier: 0, dmg: 6, tree: 1, rock: 0, swing: 0.42, desc: '나무는 맨손으로도 벨 수 있다' },
-  bow: { name: '활', cat: 'tool', kind: 'bow', tier: 2, dmg: 20, tree: 0, rock: 0, swing: 0.7, desc: '화살을 쏜다 (피해 20)' },
   iron_armor: { name: '철 갑옷', cat: 'armor', armor: 0.25, desc: '가지고만 있어도 받는 피해 -25%' },
   mithril_armor: { name: '미스릴 갑옷', cat: 'armor', armor: 0.45, desc: '가지고만 있어도 받는 피해 -45%' },
   workbench: { name: '작업대', cat: 'place', struct: 'workbench', desc: '설치하고 강화할수록 더 좋은 도구가 열린다' },
   campfire: { name: '모닥불', cat: 'place', struct: 'campfire', desc: '고기를 굽고, 곁에 있으면 체력이 빨리 찬다' },
-  wood_wall: { name: '나무 벽', cat: 'place', struct: 'wood_wall', desc: '적을 막는다 (내구도 220)' },
-  stone_wall: { name: '돌 벽', cat: 'place', struct: 'stone_wall', desc: '튼튼하게 막는다 (내구도 550)' },
+  wood_floor: { name: '나무 바닥', cat: 'place', struct: 'wood_floor', desc: '3×3 바닥. 얕은 물 위에 깔면 부두가 된다' },
+  stone_floor: { name: '돌 바닥', cat: 'place', struct: 'stone_floor', desc: '튼튼한 3×3 돌바닥' },
+  wood_wall: { name: '나무 벽', cat: 'place', struct: 'wood_wall', desc: '격자에 맞춰 붙는 벽 (내구도 220)' },
+  stone_wall: { name: '돌 벽', cat: 'place', struct: 'stone_wall', desc: '튼튼한 벽 (내구도 550)' },
+  wood_window: { name: '나무 창문', cat: 'place', struct: 'wood_window', desc: '창문 달린 나무 벽' },
+  stone_window: { name: '돌 창문', cat: 'place', struct: 'stone_window', desc: '창문 달린 돌벽' },
+  wood_door: { name: '나무 문', cat: 'place', struct: 'wood_door', desc: '[E]로 여닫는 문' },
+  iron_door: { name: '철문', cat: 'place', struct: 'iron_door', desc: '아주 튼튼한 문 (내구도 700)' },
+  wood_roof: { name: '나무 지붕', cat: 'place', struct: 'wood_roof', desc: '벽 위에 저절로 올라가는 지붕' },
+  stone_roof: { name: '기와 지붕', cat: 'place', struct: 'stone_roof', desc: '튼튼한 붉은 기와 지붕' },
+  fence: { name: '울타리', cat: 'place', struct: 'fence', desc: '낮은 나무 울타리' },
+  torch: { name: '횃불', cat: 'place', struct: 'torch', desc: '밤을 밝힌다' },
+  lantern: { name: '등불', cat: 'place', struct: 'lantern', desc: '아주 밝고 튼튼한 철 등불' },
+  bed: { name: '침대', cat: 'place', struct: 'bed', desc: '[E]를 누르면 쓰러졌을 때 여기서 일어난다' },
+  table: { name: '탁자', cat: 'place', struct: 'table', desc: '집 꾸미기용 둥근 탁자' },
+  chair: { name: '의자', cat: 'place', struct: 'chair', desc: '집 꾸미기용 의자' },
+  spikes: { name: '가시 함정', cat: 'place', struct: 'spikes', desc: '밟은 적에게 계속 피해를 준다' },
 };
 for (const [t, tn, tier] of TIERS) {
   for (const [k, B] of Object.entries(TOOLS)) {
@@ -63,11 +76,27 @@ export const NODES = {
 };
 export const NODE_IDS = Object.keys(NODES);
 
+// snap: 격자(floor/wall), floor: 발판 두께, box/r: 충돌체, light: 밝기
 export const STRUCTS = {
   workbench: { name: '작업대', hp: 260, r: 0.95 },
-  campfire: { name: '모닥불', hp: 160, r: 0.75 },
-  wood_wall: { name: '나무 벽', hp: 220, box: [1.5, 0.22] },
-  stone_wall: { name: '돌 벽', hp: 550, box: [1.5, 0.28] },
+  campfire: { name: '모닥불', hp: 160, r: 0.75, light: 3 },
+  wood_floor: { name: '나무 바닥', hp: 160, snap: 'floor', floor: 0.2 },
+  stone_floor: { name: '돌 바닥', hp: 420, snap: 'floor', floor: 0.22 },
+  wood_wall: { name: '나무 벽', hp: 220, snap: 'wall', box: [1.5, 0.2] },
+  stone_wall: { name: '돌 벽', hp: 550, snap: 'wall', box: [1.5, 0.26] },
+  wood_window: { name: '나무 창문', hp: 180, snap: 'wall', box: [1.5, 0.2] },
+  stone_window: { name: '돌 창문', hp: 450, snap: 'wall', box: [1.5, 0.26] },
+  wood_door: { name: '나무 문', hp: 200, snap: 'wall', box: [1.5, 0.2], door: true },
+  iron_door: { name: '철문', hp: 700, snap: 'wall', box: [1.5, 0.26], door: true },
+  fence: { name: '울타리', hp: 120, snap: 'wall', box: [1.5, 0.1] },
+  wood_roof: { name: '나무 지붕', hp: 160, snap: 'floor', roof: true },
+  stone_roof: { name: '기와 지붕', hp: 400, snap: 'floor', roof: true },
+  torch: { name: '횃불', hp: 60, r: 0.15, light: 1.8 },
+  lantern: { name: '등불', hp: 220, r: 0.3, light: 3 },
+  bed: { name: '침대', hp: 150, box: [0.7, 1.1], bed: true },
+  table: { name: '탁자', hp: 120, r: 0.75 },
+  chair: { name: '의자', hp: 80, r: 0.34 },
+  spikes: { name: '가시 함정', hp: 300, trap: true },
 };
 export const STRUCT_IDS = Object.keys(STRUCTS);
 
@@ -75,35 +104,49 @@ export const STRUCT_IDS = Object.keys(STRUCTS);
 export const BENCH = [
   null,
   { name: '1단계 작업대', unlock: '나무 도구 · 나무 벽' },
-  { name: '2단계 작업대', unlock: '돌 도구 · 활 · 돌 벽', cost: { wood: 25, stone: 20 } },
+  { name: '2단계 작업대', unlock: '돌 도구 · 돌 벽 · 침대 · 함정', cost: { wood: 25, stone: 20 } },
   { name: '3단계 작업대', unlock: '철 도구 · 철 갑옷', cost: { stone: 30, iron_ore: 12 } },
   { name: '4단계 작업대', unlock: '미스릴 도구 · 미스릴 갑옷', cost: { iron_ore: 15, mithril_ore: 12 } },
 ];
 export const BENCH_MAX = 4;
 
-// lv: 필요한 작업대 단계 (0 = 맨손), fire: 모닥불 근처에서만
+// lv: 필요한 작업대 단계 (0 = 맨손), fire: 모닥불 근처에서만, sec: 제작창 묶음
+export const SECTIONS = [['tool', '도구·무기'], ['build', '집 짓기'], ['life', '생활·방어'], ['food', '음식']];
 export const RECIPES = [
-  { id: 'workbench', lv: 0, cost: { wood: 15 } },
-  { id: 'campfire', lv: 0, cost: { wood: 6, stone: 4 } },
-  { id: 'wood_axe', lv: 1, cost: { wood: 8 } },
-  { id: 'wood_pick', lv: 1, cost: { wood: 8 } },
-  { id: 'wood_sword', lv: 1, cost: { wood: 10 } },
-  { id: 'wood_wall', lv: 1, cost: { wood: 6 } },
-  { id: 'stone_axe', lv: 2, cost: { wood: 5, stone: 8 } },
-  { id: 'stone_pick', lv: 2, cost: { wood: 5, stone: 8 } },
-  { id: 'stone_sword', lv: 2, cost: { wood: 4, stone: 12 } },
-  { id: 'bow', lv: 2, cost: { wood: 14, stone: 4 } },
-  { id: 'arrow', lv: 2, n: 10, cost: { wood: 3, stone: 2 } },
-  { id: 'stone_wall', lv: 2, cost: { stone: 10 } },
-  { id: 'iron_axe', lv: 3, cost: { wood: 4, iron_ore: 7 } },
-  { id: 'iron_pick', lv: 3, cost: { wood: 4, iron_ore: 7 } },
-  { id: 'iron_sword', lv: 3, cost: { wood: 3, iron_ore: 10 } },
-  { id: 'iron_armor', lv: 3, cost: { iron_ore: 20 } },
-  { id: 'mithril_axe', lv: 4, cost: { iron_ore: 4, mithril_ore: 7 } },
-  { id: 'mithril_pick', lv: 4, cost: { iron_ore: 4, mithril_ore: 7 } },
-  { id: 'mithril_sword', lv: 4, cost: { iron_ore: 4, mithril_ore: 10 } },
-  { id: 'mithril_armor', lv: 4, cost: { mithril_ore: 20 } },
-  { id: 'cooked_meat', lv: 0, fire: true, cost: { raw_meat: 1 } },
+  { id: 'workbench', lv: 0, sec: 'life', cost: { wood: 15 } },
+  { id: 'campfire', lv: 0, sec: 'life', cost: { wood: 6, stone: 4 } },
+  { id: 'wood_axe', lv: 1, sec: 'tool', cost: { wood: 8 } },
+  { id: 'wood_pick', lv: 1, sec: 'tool', cost: { wood: 8 } },
+  { id: 'wood_sword', lv: 1, sec: 'tool', cost: { wood: 10 } },
+  { id: 'wood_floor', lv: 1, sec: 'build', cost: { wood: 4 } },
+  { id: 'wood_wall', lv: 1, sec: 'build', cost: { wood: 6 } },
+  { id: 'wood_window', lv: 1, sec: 'build', cost: { wood: 6 } },
+  { id: 'wood_door', lv: 1, sec: 'build', cost: { wood: 8 } },
+  { id: 'wood_roof', lv: 1, sec: 'build', cost: { wood: 5 } },
+  { id: 'fence', lv: 1, sec: 'build', cost: { wood: 3 } },
+  { id: 'torch', lv: 1, sec: 'life', n: 2, cost: { wood: 2, stone: 1 } },
+  { id: 'chair', lv: 1, sec: 'life', cost: { wood: 5 } },
+  { id: 'table', lv: 1, sec: 'life', cost: { wood: 8 } },
+  { id: 'stone_axe', lv: 2, sec: 'tool', cost: { wood: 5, stone: 8 } },
+  { id: 'stone_pick', lv: 2, sec: 'tool', cost: { wood: 5, stone: 8 } },
+  { id: 'stone_sword', lv: 2, sec: 'tool', cost: { wood: 4, stone: 12 } },
+  { id: 'stone_floor', lv: 2, sec: 'build', cost: { stone: 6 } },
+  { id: 'stone_wall', lv: 2, sec: 'build', cost: { stone: 10 } },
+  { id: 'stone_window', lv: 2, sec: 'build', cost: { stone: 9 } },
+  { id: 'stone_roof', lv: 2, sec: 'build', cost: { stone: 8 } },
+  { id: 'bed', lv: 2, sec: 'life', cost: { wood: 16 } },
+  { id: 'spikes', lv: 2, sec: 'life', cost: { wood: 6, stone: 6 } },
+  { id: 'iron_axe', lv: 3, sec: 'tool', cost: { wood: 4, iron_ore: 7 } },
+  { id: 'iron_pick', lv: 3, sec: 'tool', cost: { wood: 4, iron_ore: 7 } },
+  { id: 'iron_sword', lv: 3, sec: 'tool', cost: { wood: 3, iron_ore: 10 } },
+  { id: 'iron_armor', lv: 3, sec: 'tool', cost: { iron_ore: 20 } },
+  { id: 'iron_door', lv: 3, sec: 'build', cost: { iron_ore: 6, wood: 2 } },
+  { id: 'lantern', lv: 3, sec: 'life', cost: { iron_ore: 2, wood: 2 } },
+  { id: 'mithril_axe', lv: 4, sec: 'tool', cost: { iron_ore: 4, mithril_ore: 7 } },
+  { id: 'mithril_pick', lv: 4, sec: 'tool', cost: { iron_ore: 4, mithril_ore: 7 } },
+  { id: 'mithril_sword', lv: 4, sec: 'tool', cost: { iron_ore: 4, mithril_ore: 10 } },
+  { id: 'mithril_armor', lv: 4, sec: 'tool', cost: { mithril_ore: 20 } },
+  { id: 'cooked_meat', lv: 0, sec: 'food', fire: true, cost: { raw_meat: 1 } },
 ];
 
 export const ENEMIES = {
@@ -180,8 +223,8 @@ export function hotbarList(inv) {
     for (const [id, I] of Object.entries(ITEMS)) if (I.kind === kind && inv[id] > 0 && (!best || I.tier > ITEMS[best].tier)) best = id;
     if (best) out.push(best);
   }
-  if (inv.bow > 0) out.push('bow');
-  for (const id of ['cooked_meat', 'apple', 'raw_meat', 'workbench', 'campfire', 'wood_wall', 'stone_wall']) if (inv[id] > 0) out.push(id);
+  for (const id of ['cooked_meat', 'apple', 'raw_meat', 'workbench', 'campfire', 'wood_floor', 'wood_wall', 'wood_window', 'wood_door', 'wood_roof',
+    'stone_floor', 'stone_wall', 'stone_window', 'stone_roof', 'iron_door', 'fence', 'torch', 'lantern', 'bed', 'table', 'chair', 'spikes']) if (inv[id] > 0) out.push(id);
   return out;
 }
 

@@ -2,6 +2,7 @@
 import * as THREE from 'three';
 import { PLAYER, ITEMS, NODES, STRUCTS, BENCH_MAX, hotbarList } from '../shared/config.js';
 import { moveBody } from '../shared/physics.js';
+import { snapRot, snapPos, baseY, canPlace, floorTop } from '../shared/build.js';
 import { buildViewHand, buildItem, buildStruct } from './models.js';
 
 const PI = Math.PI;
@@ -56,7 +57,6 @@ export class LocalPlayer {
     this.hitDone = true;
     this.nextAction = 0;
     this.eatT = -1;
-    this.bowT = -1;
     this.airJumps = 0;
     this.bobT = 0;
     this.kick = 0;
@@ -95,7 +95,7 @@ export class LocalPlayer {
         if (id) this.select(this.sel === id ? null : id);
       } else if (e.code === 'Backquote' || e.code === 'Digit0') this.select(null);
       else if (e.code === 'KeyE' && this.target) this.target.act();
-      else if (e.code === 'KeyR') this.placeRot += PI / 4;
+      else if (e.code === 'KeyR') this.placeRot += ITEMS[this.held].struct && STRUCTS[ITEMS[this.held].struct].snap ? PI / 2 : PI / 4;
     });
     document.addEventListener('keyup', (e) => this.keys.delete(e.code));
     document.addEventListener('mousedown', (e) => {
@@ -179,19 +179,12 @@ export class LocalPlayer {
     const g = this.g, t = g.time;
     if (t < this.nextAction) return;
     const id = this.held, I = ITEMS[id];
-    if (I.cat === 'tool' && I.kind !== 'bow') {
+    if (I.cat === 'tool') {
       this.swingT = 0;
       this.hitDone = false;
       this.swingDur = I.swing;
       this.nextAction = t + I.swing;
       g.sound.play('swing', null, 0.6);
-    } else if (I.kind === 'bow') {
-      this.nextAction = t + I.swing;
-      if (!(this.inv.arrow > 0)) { g.hud.toast('화살이 없습니다. 작업대에서 만드세요.', 'bad'); return; }
-      const f = this.forward();
-      g.socket.emit('shoot', { d: [r3(f.x), r3(f.y), r3(f.z)] });
-      this.bowT = 0;
-      g.sound.play('bowshot');
     } else if (I.cat === 'food') {
       g.socket.emit('eat', { item: id });
       this.eatT = 0;
@@ -201,7 +194,7 @@ export class LocalPlayer {
       this.nextAction = t + 0.35;
       this.lmb = false;
       if (this.ghostValid) g.socket.emit('place', { item: id, x: r2(this.ghost.position.x), z: r2(this.ghost.position.z), rot: r3(this.ghostRot) });
-      else { g.sound.play('err'); g.hud.toast('여기에는 놓을 수 없습니다.', 'bad'); }
+      else { g.sound.play('err'); g.hud.toast(this.ghostReason || '여기에는 놓을 수 없습니다.', 'bad'); }
     }
   }
 
@@ -280,6 +273,9 @@ export class LocalPlayer {
       }
     }
     for (const s of g.world.structs.values()) {
+      const S = STRUCTS[s.type];
+      if (S.door) { consider(s.x, s.z, 3.4, `[E] ${S.name} ${s.open ? '닫기' : '열기'}`, () => g.socket.emit('door', { id: s.id })); continue; }
+      if (S.bed) { consider(s.x, s.z, 3, '[E] 침대 · 쓰러지면 여기서 일어나기', () => g.socket.emit('bed', { id: s.id })); continue; }
       if (!INTERACT.has(s.type)) continue;
       const text = s.type === 'workbench' ? `[E] ${s.lv}단계 작업대 · 제작${s.lv < BENCH_MAX ? ' / 강화' : ''}` : '[E] 모닥불 · 고기 굽기';
       consider(s.x, s.z, 3.6, text, () => g.openCraft());
@@ -289,52 +285,66 @@ export class LocalPlayer {
   }
 
   rebuildViewItem() {
-    const id = this.held, M = this.view.mount;
-    M.clear();
+    const id = this.held, { mount, palmMount } = this.view;
+    mount.clear();
+    palmMount.clear();
     this.viewItemId = id;
     if (id === 'fist') return;
     const I = ITEMS[id], item = buildItem(id);
-    if (I.cat === 'tool' && I.kind !== 'bow') {
-      item.rotation.set(0.55, 0.25, -0.12);
-      item.position.set(0, -0.06, 0.04);
-      item.scale.setScalar(0.72);
-    } else if (I.kind === 'bow') {
-      item.rotation.set(0, -0.2, 0.15);
-      item.scale.setScalar(0.9);
+    if (I.cat === 'tool') {
+      // 손잡이 아래쪽을 쥔다. 도끼·곡괭이·칼 모두 날이 앞(휘두르면 바닥 쪽)을 향한다
+      const s = 0.6;
+      item.scale.setScalar(s);
+      item.position.y = -(I.kind === 'sword' ? 0.1 : 0.06) * s;
+      item.rotation.y = PI / 2;
+      mount.add(item);
     } else if (I.cat === 'food') {
-      item.scale.setScalar(1.1);
-      item.position.set(0, 0.02, -0.02);
+      // 손바닥 위에 올려 든다 (고기는 눕혀서)
+      item.scale.setScalar(id === 'apple' ? 0.42 : 0.3);
+      if (id !== 'apple') { item.rotation.set(0, 0.5, PI / 2); item.position.set(0.05, 0.035, 0.005); }
+      palmMount.add(item);
     } else {
-      item.position.set(0, 0.05, -0.05);
+      item.scale.multiplyScalar(0.55);
+      palmMount.add(item);
     }
-    M.add(item);
   }
 
   updateView(dt, hs) {
     if (!this.view) return;
-    const V = this.view.group;
+    const V = this.view.group, G = this.view.grip, Pm = this.view.palm;
     V.visible = true;
     if (this.held !== this.viewItemId) this.rebuildViewItem();
-    const I = ITEMS[this.held];
-    let px = 0.42, py = -0.38, pz = -0.66, rx = 0, rz = 0;
-    const sway = Math.sin(this.bobT) * 0.025 * Math.min(1, hs / 6);
+    const I = ITEMS[this.held], tool = I.cat === 'tool' && I.kind !== 'fist';
+    const palmMode = I.cat === 'food' || I.cat === 'place';
+    G.visible = !palmMode;
+    Pm.visible = palmMode;
+    let px = 0.3, py = -0.26, pz = -0.5, rx = 0, rz = 0;
+    const sway = Math.sin(this.bobT) * 0.02 * Math.min(1, hs / 6);
     px += sway;
-    py += Math.abs(sway) * 0.7;
-    if (I.kind === 'bow') { px = 0.05; py = -0.28; pz = -0.62; if (this.bowT >= 0) pz += Math.sin((this.bowT / 0.35) * PI) * 0.1; }
+    py += Math.abs(sway) * 0.7 - (tool ? 0 : 0.03);
+    if (tool) {
+      G.rotation.set(-0.42, 0.1, 0.38);
+    } else if (palmMode) {
+      px = 0.2 + sway; py = -0.25; pz = -0.44;
+      Pm.rotation.set(0.5, 0.35, 0.08);
+    } else {
+      G.rotation.set(-0.12, 0.2, 0.22);
+    }
     if (this.swingT >= 0) {
       const p = this.swingT / this.swingDur;
       if (p < 0.22) rx = (p / 0.22) * 0.55;
       else if (p < 0.42) rx = 0.55 - ((p - 0.22) / 0.2) * 1.95;
       else rx = -1.4 * (1 - (p - 0.42) / 0.58);
       const s = Math.max(0, -rx);
-      px -= s * 0.12;
-      pz -= s * 0.1;
+      px -= s * 0.1;
+      pz -= s * 0.08;
       rz = s * 0.25;
     }
     if (this.eatT >= 0) {
       const k = Math.sin((this.eatT / 0.5) * PI);
-      py += k * 0.22;
-      px -= k * 0.25;
+      py += k * 0.16;
+      px -= k * 0.16;
+      pz += k * 0.08;
     }
     V.position.set(px, py, pz);
     V.rotation.set(rx, 0, rz);
@@ -358,32 +368,26 @@ export class LocalPlayer {
       this.ghostType = I.struct;
       g.scene.add(group);
     }
-    const cam = g.camera.position, f = this.forward(), T = g.world.terrain, b = this.body;
-    let px = cam.x + f.x * 5, pz = cam.z + f.z * 5;
-    for (let s = 1; s <= 8; s += 0.25) {
+    const cam = g.camera.position, f = this.forward(), W = g.world, T = W.terrain, b = this.body;
+    const type = I.struct, S = STRUCTS[type], reach = S.snap ? 9 : 8;
+    let px = cam.x + f.x * reach * 0.6, pz = cam.z + f.z * reach * 0.6;
+    for (let s = 1; s <= reach; s += 0.25) {
       const x = cam.x + f.x * s, y = cam.y + f.y * s, z = cam.z + f.z * s;
-      if (y <= T.h(x, z)) { px = x; pz = z; break; }
+      if (y <= Math.max(T.h(x, z), floorTop(W.cols, x, z))) { px = x; pz = z; break; }
     }
-    if (Math.hypot(px - b.x, pz - b.z) < 2) {
+    if (!S.snap && Math.hypot(px - b.x, pz - b.z) < 2) {
       px = b.x - Math.sin(this.yaw) * 2.2;
       pz = b.z - Math.cos(this.yaw) * 2.2;
     }
-    const rot = Math.round((this.yaw + this.placeRot) / (PI / 4)) * (PI / 4);
-    const h = T.h(px, pz);
-    this.ghost.position.set(px, h, pz);
+    const rot = snapRot(type, this.yaw + this.placeRot);
+    ({ x: px, z: pz } = snapPos(type, px, pz, rot));
+    this.ghost.position.set(px, baseY(type, px, pz, rot, T, W.cols), pz);
     this.ghost.rotation.y = rot;
     this.ghostRot = rot;
-    const S = STRUCTS[I.struct], rad = S.box ? 0.9 : S.r;
-    let ok = h >= 0.2 && T.slope(px, pz) <= 0.9 && Math.hypot(px - b.x, pz - b.z) <= 8.5 && Math.hypot(px, pz) <= 170;
-    if (ok) {
-      g.world.cols.query(px, pz, rad + 3, (c) => {
-        if (!ok || c.r === 0) return;
-        const cr = c.r !== undefined ? c.r : c.hz + 0.5;
-        if (Math.hypot(c.x - px, c.z - pz) < cr + rad) ok = false;
-      });
-    }
-    this.ghostValid = ok;
-    this.ghostMat.color.setHex(ok ? 0x6bff7b : 0xff5a4a);
+    const reason = Math.hypot(px - b.x, pz - b.z) > 10.5 ? '너무 멉니다.' : canPlace(type, px, pz, rot, T, W.cols, W.structs.values());
+    this.ghostValid = !reason;
+    this.ghostReason = reason;
+    this.ghostMat.color.setHex(reason ? 0xff5a4a : 0x6bff7b);
   }
 
   update(dt) {
@@ -455,7 +459,6 @@ export class LocalPlayer {
       if (this.swingT >= this.swingDur) this.swingT = -1;
     }
     if (this.eatT >= 0 && (this.eatT += dt) > 0.5) this.eatT = -1;
-    if (this.bowT >= 0 && (this.bowT += dt) > 0.35) this.bowT = -1;
     this.updateView(dt, hs);
     this.updateGhost();
     this.target = ctl ? this.findTarget() : null;

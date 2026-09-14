@@ -480,3 +480,14 @@ h3 { font-family: 'Black Han Sans', 'Jua', sans-serif; font-weight: normal; font
 .rc.can:hover { transform: translateY(-2px); box-shadow: 0 5px 0 var(--ink); }
 #notice h2 { filter: drop-shadow(0 10px 14px rgba(0, 0, 0, 0.35)); }
 .fr, .tm, #toast { backdrop-filter: blur(4px); }
+#hotbar.many { gap: 4px; }
+#hotbar.many .slot { width: 46px; height: 46px; border-radius: 12px; }
+#hotbar.many .slot img { width: 32px; height: 32px; }
+#hotbar.many .slot b { font-size: 12px; }
+#recipeList .sec { grid-column: 1 / -1; margin: 6px 0 0; font-family: 'Black Han Sans', 'Jua', sans-serif; font-weight: normal; font-size: 16px; color: var(--muted); border-bottom: 3px dashed #d8c39b; padding-bottom: 3px; }
+#recipeList .sec:first-child { margin-top: 0; }
+#netLost { position: fixed; inset: 0; z-index: 60; display: flex; align-items: center; justify-content: center; background: rgba(20, 12, 4, 0.55); }
+#netLost .card { width: 380px; max-width: 92vw; text-align: center; animation: panelIn 0.2s ease-out; }
+#netLost .spinner img { width: 70px; height: 70px; animation: wobble 1s ease-in-out infinite; }
+#netLost h2 { margin: 6px 0; font-family: 'Black Han Sans', 'Jua', sans-serif; font-weight: normal; font-size: 26px; }
+#netLost p { margin: 0 0 16px; font-size: 15px; color: var(--muted); line-height: 1.5; }

@@ -109,6 +109,93 @@ const ICONS = {
     ${hl('M9 15 L20 15 M21 28 L34 28 M9 41 L18 41', 2, 0.5)}`),
 
   // ── UI ──────────────────────────────────────────
+  wood_floor: () => svg(`
+    <path d="M4 36 L32 52 L60 36 L60 28 L32 44 L4 28 Z" fill="${WOOD_D}"/>
+    <path d="M32 12 L60 28 L32 44 L4 28 Z" fill="${WOOD_L}"/>
+    ${line('M11 24 L39 40 M18 20 L46 36 M25 16 L53 32', WOOD, 2.5)}
+    ${hl('M12 28 L32 16', 2, 0.6)}`),
+  stone_floor: () => svg(`
+    <path d="M4 36 L32 52 L60 36 L60 28 L32 44 L4 28 Z" fill="#76736e"/>
+    <path d="M32 12 L60 28 L32 44 L4 28 Z" fill="#b3b0a9"/>
+    ${line('M18 20 L46 36 M46 20 L18 36', '#7d7a76', 3)}
+    ${hl('M12 28 L32 16', 2, 0.6)}`),
+  wood_window: () => svg(`
+    <rect x="5" y="8" width="54" height="50" rx="3" fill="${WOOD}"/>
+    ${line('M5 20 L59 20 M5 33 L59 33 M5 46 L59 46', WOOD_D, 2.5)}
+    <rect x="19" y="17" width="26" height="24" rx="2" fill="#9ad8ff"/>
+    ${line('M32 17 L32 41 M19 29 L45 29', INK, 3)}
+    ${hl('M23 22 L28 22', 2.5, 0.9)}`),
+  stone_window: () => svg(`
+    ${[[5, 8, 18], [23, 8, 18], [41, 8, 18], [5, 21, 12], [45, 21, 14], [5, 34, 12], [45, 34, 14], [5, 47, 22], [27, 47, 16], [43, 47, 16]]
+      .map(([x, y, w], i) => `<rect x="${x}" y="${y}" width="${w}" height="13" rx="2" fill="${['#a9a69f', '#9c9a95', '#8f8c86'][i % 3]}" stroke-width="2.5"/>`).join('')}
+    <rect x="17" y="21" width="28" height="26" rx="2" fill="#9ad8ff"/>
+    ${line('M31 21 L31 47 M17 34 L45 34', INK, 3)}
+    ${hl('M21 26 L26 26', 2.5, 0.9)}`),
+  wood_door: () => svg(`
+    <rect x="13" y="5" width="38" height="55" rx="5" fill="${WOOD}"/>
+    ${line('M26 6 L26 59 M38 6 L38 59', WOOD_D, 2.5)}
+    <rect x="13" y="15" width="38" height="7" fill="${WOOD_D}" stroke-width="2.5"/>
+    <rect x="13" y="42" width="38" height="7" fill="${WOOD_D}" stroke-width="2.5"/>
+    <circle cx="44" cy="33" r="3.5" fill="#ffcf3d" stroke-width="2"/>`),
+  iron_door: () => svg(`
+    <rect x="13" y="5" width="38" height="55" rx="4" fill="#8f96a0"/>
+    <rect x="13" y="14" width="38" height="7" fill="#5f666f" stroke-width="2.5"/>
+    <rect x="13" y="44" width="38" height="7" fill="#5f666f" stroke-width="2.5"/>
+    ${[[19, 17.5], [32, 17.5], [45, 17.5], [19, 47.5], [32, 47.5], [45, 47.5]].map(([x, y]) => `<circle cx="${x}" cy="${y}" r="1.8" fill="#dfe3e8" stroke="none"/>`).join('')}
+    <circle cx="43" cy="33" r="4.5" fill="none" stroke-width="3.5"/>
+    ${hl('M18 25 L18 40', 2.5, 0.5)}`),
+  wood_roof: () => svg(`
+    <rect x="14" y="36" width="36" height="22" fill="${WOOD_L}"/>
+    <rect x="27" y="44" width="10" height="14" fill="${WOOD_D}" stroke-width="2.5"/>
+    <path d="M2 40 L32 8 L62 40 Z" fill="#a8602e"/>
+    ${line('M12 30 L52 30 M20 22 L44 22', '#7a3f18', 2.5)}
+    ${hl('M10 36 L30 14', 2.5, 0.5)}`),
+  stone_roof: () => svg(`
+    <rect x="14" y="36" width="36" height="22" fill="#b3b0a9"/>
+    <rect x="27" y="44" width="10" height="14" fill="${WOOD_D}" stroke-width="2.5"/>
+    <path d="M2 40 L32 8 L62 40 Z" fill="#c4553a"/>
+    ${line('M12 30 L52 30 M20 22 L44 22 M26 16 L38 16', '#8e2f1c', 2.5)}
+    ${hl('M10 36 L30 14', 2.5, 0.5)}`),
+  fence: () => svg(`
+    ${[8, 28, 48].map((x) => `<path d="M${x} 60 L${x} 16 L${x + 4} 8 L${x + 8} 16 L${x + 8} 60 Z" fill="${WOOD}"/>`).join('')}
+    <rect x="2" y="24" width="60" height="7" rx="2" fill="${WOOD_L}"/>
+    <rect x="2" y="42" width="60" height="7" rx="2" fill="${WOOD_L}"/>`),
+  torch: () => svg(`
+    ${rod('M22 60 L38 24', WOOD, 6)}
+    <path d="M34 26 L46 30 L42 20 Z" fill="#5a3a22"/>
+    <path d="M42 2 C52 12 56 20 50 28 C46 33 36 32 34 26 C32 18 40 16 42 2 Z" fill="#ff8a2a"/>
+    <path d="M42 14 C46 19 48 23 45 26 C43 28 39 28 38 25 C37 21 41 20 42 14 Z" fill="#ffe066" stroke-width="2"/>`),
+  lantern: () => svg(`
+    <path d="M32 3 L32 12" fill="none" stroke-width="4"/>
+    <path d="M20 16 L44 16 L38 8 L26 8 Z" fill="#5f666f"/>
+    <rect x="18" y="16" width="28" height="34" rx="4" fill="#ffd95a"/>
+    <path d="M26 42 C26 34 32 30 32 24 C36 30 38 34 38 42 Z" fill="#ff9b2e" stroke-width="2"/>
+    ${line('M18 30 L46 30', '#5f666f', 2.5)}
+    <rect x="16" y="50" width="32" height="8" rx="2" fill="#5f666f"/>
+    ${hl('M23 20 L23 44', 2.5, 0.8)}`),
+  bed: () => svg(`
+    <rect x="4" y="20" width="10" height="38" rx="2" fill="${WOOD_D}"/>
+    <rect x="50" y="34" width="10" height="24" rx="2" fill="${WOOD_D}"/>
+    <rect x="8" y="34" width="50" height="14" rx="3" fill="#f4efe3"/>
+    <path d="M26 30 L58 30 L58 46 L26 46 Z" fill="#d23a2a"/>
+    <rect x="12" y="26" width="16" height="10" rx="4" fill="#ffffff"/>
+    <rect x="6" y="46" width="54" height="8" fill="${WOOD}"/>
+    ${line('M34 34 L54 34', '#ff7b6b', 2.5)}`),
+  table: () => svg(`
+    <path d="M28 30 L24 56 M36 30 L40 56" fill="none" stroke-width="10"/>
+    <path d="M28 30 L24 56 M36 30 L40 56" fill="none" stroke="${WOOD_D}" stroke-width="5"/>
+    <ellipse cx="32" cy="24" rx="28" ry="10" fill="${WOOD_L}"/>
+    <path d="M4 24 C4 34 60 34 60 24 L60 28 C60 38 4 38 4 28 Z" fill="${WOOD}"/>
+    <rect x="36" y="10" width="10" height="12" rx="2" fill="#f4efe3" stroke-width="2.5"/>`),
+  chair: () => svg(`
+    <rect x="18" y="4" width="28" height="30" rx="4" fill="${WOOD}"/>
+    ${line('M26 8 L26 30 M38 8 L38 30', WOOD_D, 2.5)}
+    <rect x="12" y="32" width="40" height="9" rx="3" fill="${WOOD_L}"/>
+    <path d="M17 41 L15 60 M47 41 L49 60" fill="none" stroke-width="8"/>
+    <path d="M17 41 L15 60 M47 41 L49 60" fill="none" stroke="${WOOD_D}" stroke-width="4"/>`),
+  spikes: () => svg(`
+    <path d="M2 46 L32 60 L62 46 L32 34 Z" fill="${WOOD}"/>
+    ${[[14, 42], [26, 38], [38, 38], [50, 42], [22, 49], [34, 50], [44, 48]].map(([x, y]) => `<path d="M${x - 5} ${y + 2} L${x} ${y - 24} L${x + 5} ${y + 2} Z" fill="#c9ced6" stroke-width="2.2"/>`).join('')}`),
   coin: () => svg(`
     <circle cx="32" cy="32" r="26" fill="#ffcf3d"/>
     <circle cx="32" cy="32" r="18.5" fill="#ffdd6b" stroke="#d99a1a" stroke-width="3"/>

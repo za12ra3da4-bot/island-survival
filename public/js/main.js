@@ -50,10 +50,18 @@ window.addEventListener('resize', () => {
   applyQuality();
 });
 
-const socket = io(window.GAME_SERVER || undefined, { reconnectionDelayMax: 4000 });
+const socket = io(window.GAME_SERVER || undefined, { reconnectionDelayMax: 3000, transports: ['websocket', 'polling'] });
+// 이 탭의 자리 표 — 연결이 끊겼다 다시 붙을 때 내 캐릭터를 찾는다
+const token = (() => {
+  try {
+    let t = sessionStorage.getItem('island.token');
+    if (!t) { t = `${Date.now().toString(36)}${Math.random().toString(36).slice(2)}`; sessionStorage.setItem('island.token', t); }
+    return t;
+  } catch { return `${Date.now().toString(36)}${Math.random().toString(36).slice(2)}`; }
+})();
 const game = {
   socket, settings, scene, camera, renderer,
-  state: 'menu', active: false, locked: false, uiOpen: false, chatOpen: false,
+  state: 'menu', active: false, locked: false, uiOpen: false, chatOpen: false, reconnecting: false,
   you: 0, lobby: null, world: null, mode: 'escape', time: 0,
   players: new Map(), enemies: new Map(), drops: new Map(), projs: new Map(), roster: new Map(), deadEnemies: new Map(),
   coins: 0, hp: 100, maxHp: 100, hunger: 100, clock: 0, day: 1, final: -1, chestsOpened: 0, offset: null,
@@ -125,11 +133,26 @@ function disposePreview() {
 // ── 연결 상태 ────────────────────────────────────
 const netStatus = (text, cls) => { $('netStatus').textContent = text; $('netStatus').className = `net ${cls}`; };
 netStatus('서버 연결 중…', 'wait');
-socket.on('connect', () => netStatus('서버 연결됨', 'ok'));
+socket.on('connect', () => {
+  netStatus('서버 연결됨', 'ok');
+  if (!game.reconnecting || !game.lobby) return;
+  socket.timeout(8000).emit('resume', { code: game.lobby.code, token }, (err, res) => {
+    game.reconnecting = false;
+    $('netLost').hidden = true;
+    if (err || !res || !res.ok) { leaveToMenu((res && res.error) || '다시 들어가지 못했습니다.'); return; }
+    game.you = res.you;
+    renderLobby(res.lobby);
+  });
+});
 socket.on('connect_error', () => netStatus('서버에 연결할 수 없습니다 — 주소와 방장 PC 방화벽을 확인하세요', 'bad'));
-socket.on('disconnect', () => {
+socket.on('disconnect', (reason) => {
   netStatus('서버와 연결이 끊겼습니다', 'bad');
-  if (game.state !== 'menu') leaveToMenu('서버와 연결이 끊겼습니다.');
+  if (game.state === 'menu' || !game.lobby || reason === 'io client disconnect') return;
+  game.reconnecting = true;
+  $('netLost').hidden = false;
+  player.keys.clear();
+  player.lmb = false;
+  if (document.pointerLockElement) document.exitPointerLock();
 });
 
 // ── 메뉴 ─────────────────────────────────────────
@@ -182,13 +205,13 @@ function refreshRooms() {
 $('refreshBtn').addEventListener('click', refreshRooms);
 $('createBtn').addEventListener('click', () => {
   sound.init();
-  socket.timeout(8000).emit('create', { name: playerName(), color: myColor, mode, difficulty, isPublic: $('publicCheck').checked }, (err, res) => onEnterRoom(err, res));
+  socket.timeout(8000).emit('create', { name: playerName(), color: myColor, mode, difficulty, isPublic: $('publicCheck').checked, token }, (err, res) => onEnterRoom(err, res));
 });
 function joinRoom(code) {
   code = String(code || '').trim().toUpperCase();
   if (code.length !== 4) { $('menuError').textContent = '방 코드 4자리를 입력하세요.'; return; }
   sound.init();
-  socket.timeout(8000).emit('join', { code, name: playerName(), color: myColor }, (err, res) => onEnterRoom(err, res));
+  socket.timeout(8000).emit('join', { code, name: playerName(), color: myColor, token }, (err, res) => onEnterRoom(err, res));
 }
 $('joinBtn').addEventListener('click', () => joinRoom($('codeInput').value));
 $('codeInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') joinRoom($('codeInput').value); });
@@ -266,6 +289,8 @@ function clearEntities() {
 
 function leaveToMenu(msg = '') {
   socket.emit('leave');
+  game.reconnecting = false;
+  $('netLost').hidden = true;
   if (document.pointerLockElement) document.exitPointerLock();
   endGameScene();
   game.state = 'menu';
@@ -478,11 +503,6 @@ socket.on('eshot', (m) => {
   const v = game.enemies.get(m.id);
   if (v) sound.play(m.big ? 'slam' : 'bowshot', [v.pos.x, v.pos.y + 1, v.pos.z], m.big ? 0.5 : 0.8);
 });
-socket.on('pshot', (m) => {
-  if (m.n === game.you) return;
-  const v = game.players.get(m.n);
-  if (v) sound.play('bowshot', [v.state.x, v.state.y + 1.5, v.state.z]);
-});
 socket.on('phit', (m) => {
   if (m.k === 2) return;
   fx.burst(m.x, m.y, m.z, m.e ? '#c0392b' : '#c9b89a', 5, { speed: 3, size: 0.07, life: 0.35 });
@@ -556,6 +576,11 @@ socket.on('sdel', (m) => {
   hud.toast(`${STRUCTS[s.type].name}이(가) 부서졌습니다!`, 'bad');
   sound.play('slam', [s.x, s.y, s.z], 0.5);
 });
+socket.on('sdoor', (m) => {
+  const s = game.world && game.world.setDoor(m.id, !!m.open);
+  if (s) sound.play('chest', [s.x, s.y + 1, s.z], 0.6);
+});
+socket.on('bedset', () => hud.notice('부활 지점 저장!', '쓰러지면 아침에 이 침대에서 일어납니다', 'gold'));
 socket.on('supg', (m) => {
   const s = game.world && game.world.upgradeStruct(m.id, m.lv);
   if (!s) return;
@@ -617,6 +642,7 @@ socket.on('chat', (m) => {
 
 $('resAgain').addEventListener('click', () => socket.emit('tolobby'));
 $('resLeave').addEventListener('click', () => leaveToMenu());
+$('netLostLeave').addEventListener('click', () => leaveToMenu());
 
 // ── 마우스 잠금 · 일시정지 · 창 ───────────────────
 function requestLock() {

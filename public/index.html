@@ -155,7 +155,7 @@
     <button id="pauseSettingsBtn" class="btn">설정</button>
     <button id="endGameBtn" class="btn ghost">게임 끝내고 대기실로</button>
     <button id="pauseLeaveBtn" class="btn ghost">방 나가기</button>
-    <div class="keys"><b>WASD</b> 이동 <b>Shift</b> 달리기 <b>Space</b> 점프<br><b>클릭</b> 공격·채집·먹기·설치 <b>E</b> 상호작용 <b>R</b> 설치물 회전<br><b>Tab</b> 제작 <b>M</b> 지도 <b>1~9 · 휠</b> 도구 <b>Enter</b> 채팅</div>
+    <div class="keys"><b>WASD</b> 이동 <b>Shift</b> 달리기 <b>Space</b> 점프<br><b>클릭</b> 공격·채집·먹기·설치 <b>E</b> 상호작용·문 <b>R</b> 설치물 회전<br><b>Tab</b> 제작 <b>M</b> 지도 <b>1~9 · 휠</b> 도구 <b>Enter</b> 채팅</div>
   </div>
 
   <div id="powerCard" hidden></div>
@@ -167,6 +167,15 @@
     <div class="panel-foot"><button id="resLeave" class="btn ghost">방 나가기</button><span id="resWait">방장이 다음 판을 준비하는 중…</span><button id="resAgain" class="btn big green">대기실로</button></div>
   </div>
 </section>
+
+<div id="netLost" hidden>
+  <div class="card">
+    <div class="spinner"><img src="assets/icons/p_cloud.svg" alt=""></div>
+    <h2>연결이 잠깐 끊겼어요</h2>
+    <p>다시 접속하는 중… 내 캐릭터와 가방은 90초 동안 섬에 그대로 남아 있어요.</p>
+    <button id="netLostLeave" class="btn ghost">방 나가기</button>
+  </div>
+</div>
 
 <div id="settingsModal" class="modal" hidden>
   <div class="card settings-card">

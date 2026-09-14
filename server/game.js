@@ -5,6 +5,7 @@ import {
 } from '../public/shared/config.js';
 import { Terrain, fbm } from '../public/shared/terrain.js';
 import { Colliders, moveBody } from '../public/shared/physics.js';
+import { snapPos, baseY, structCollider, canPlace } from '../public/shared/build.js';
 
 const r2 = (v) => Math.round(v * 100) / 100;
 const r1 = (v) => Math.round(v * 10) / 10;
@@ -160,7 +161,7 @@ export class Game {
   }
 
   structPayload(s) {
-    return [s.id, STRUCT_IDS.indexOf(s.type), r2(s.x), r2(s.z), r2(s.rot), Math.round((s.hp / s.maxHp) * 100), s.lv || 0];
+    return [s.id, STRUCT_IDS.indexOf(s.type), r2(s.x), r2(s.z), r2(s.rot), Math.round((s.hp / s.maxHp) * 100), s.lv || 0, s.open ? 1 : 0];
   }
 
   boatPayload() {
@@ -184,6 +185,17 @@ export class Game {
       stats: { kills: 0, dmg: 0, gathered: 0, chests: 0 },
     };
     this.players.set(p.nid, p);
+    this.emitTo(p, 'start', this.startPayload(p));
+    this.emit('roster', this.roster());
+    return p;
+  }
+
+  // 잠깐 끊겼다 다시 들어온 사람 — 캐릭터는 그대로, 화면만 다시 보낸다
+  reconnect(m) {
+    const p = this.players.get(m.nid);
+    if (!p) return this.addPlayer(m);
+    p.sid = m.sid;
+    p.socket = m.socket;
     this.emitTo(p, 'start', this.startPayload(p));
     this.emit('roster', this.roster());
     return p;
@@ -260,9 +272,10 @@ export class Game {
       p.alive = true;
       p.hp = p.maxHp * 0.6;
       p.hunger = Math.max(p.hunger, 60);
-      p.x = this.spawn.x + rand(-3, 3);
-      p.z = this.spawn.z + rand(-3, 3);
-      p.y = this.terrain.h(p.x, p.z);
+      const bed = p.bed && this.structs.get(p.bed);
+      p.x = (bed ? bed.x : this.spawn.x) + rand(-2, 2);
+      p.z = (bed ? bed.z : this.spawn.z) + rand(-2, 2);
+      p.y = bed ? bed.y + 0.4 : this.terrain.h(p.x, p.z);
       this.emitTo(p, 'respawn', { x: r2(p.x), y: r2(p.y), z: r2(p.z) });
     }
     this.emit('roster', this.roster());
@@ -279,11 +292,12 @@ export class Game {
       case 'craft': return this.onCraft(p, m);
       case 'place': return this.onPlace(p, m);
       case 'eat': return this.onEat(p, m);
-      case 'shoot': return this.onShoot(p, m);
       case 'chest': return this.onChest(p, m);
       case 'boat': return this.onBoat(p);
       case 'launch': return this.onLaunch(p);
       case 'upgrade': return this.onUpgrade(p, m);
+      case 'door': return this.onDoor(p, m);
+      case 'bed': return this.onBed(p, m);
     }
   }
 
@@ -313,7 +327,7 @@ export class Game {
   onAttack(p, m) {
     if (!p.alive || !m || !Array.isArray(m.ids)) return;
     const it = this.heldTool(p);
-    if (it.kind === 'bow' || this.time - p.lastAttack < it.swing * 0.7) return;
+    if (this.time - p.lastAttack < it.swing * 0.7) return;
     p.lastAttack = this.time;
     const maxT = it.kind === 'sword' ? 3 : 1;
     const done = new Set();
@@ -458,6 +472,22 @@ export class Game {
     this.emit('supg', { id: s.id, lv: s.lv, by: p.nid });
   }
 
+  onDoor(p, m) {
+    const s = this.structs.get(m ? m.id | 0 : -1);
+    if (!p.alive || !s || !STRUCTS[s.type].door || Math.hypot(s.x - p.x, s.z - p.z) > 5) return;
+    s.open = !s.open;
+    if (s.open) this.cols.remove(s.col);
+    else this.cols.add(s.col);
+    this.emit('sdoor', { id: s.id, open: s.open ? 1 : 0 });
+  }
+
+  onBed(p, m) {
+    const s = this.structs.get(m ? m.id | 0 : -1);
+    if (!p.alive || !s || s.type !== 'bed' || Math.hypot(s.x - p.x, s.z - p.z) > 5) return;
+    p.bed = s.id;
+    this.emitTo(p, 'bedset', { id: s.id });
+  }
+
   onCraft(p, m) {
     const R = RECIPES.find((r) => m && r.id === m.r);
     if (!R || !p.alive) return;
@@ -478,28 +508,25 @@ export class Game {
   onPlace(p, m) {
     const item = m && m.item, I = ITEMS[item];
     if (!p.alive || !I || I.cat !== 'place' || !(p.inv[item] > 0)) return;
-    const x = +m.x, z = +m.z, rot = Number.isFinite(+m.rot) ? +m.rot : 0;
+    const type = I.struct, S = STRUCTS[type];
+    let x = +m.x, z = +m.z, rot = Number.isFinite(+m.rot) ? +m.rot : 0;
     if (!Number.isFinite(x) || !Number.isFinite(z)) return;
-    if (Math.hypot(x - p.x, z - p.z) > 9 || Math.hypot(x, z) > 170) return this.err(p, '너무 멉니다.');
-    const S = STRUCTS[I.struct], h = this.terrain.h(x, z);
-    if (h < 0.2) return this.err(p, '물 위에는 지을 수 없습니다.');
-    if (this.terrain.slope(x, z) > 0.9) return this.err(p, '땅이 너무 가파릅니다.');
-    const rad = S.box ? 0.9 : S.r;
-    let bad = false;
-    this.cols.query(x, z, rad + 3, (c) => {
-      if (bad) return;
-      const cr = c.r !== undefined ? c.r : c.hz + 0.5;
-      if (c.r === 0) return;
-      if (Math.hypot(c.x - x, c.z - z) < cr + rad) bad = true;
-    });
-    if (bad) return this.err(p, '여기에는 놓을 수 없습니다.');
-    const s = { id: ++this.seq.struct, type: I.struct, x, z, y: h, rot, hp: S.hp, maxHp: S.hp, by: p.nid, lv: I.struct === 'workbench' ? 1 : 0 };
-    s.col = S.box
-      ? { x, z, hx: S.box[0], hz: S.box[1], cos: Math.cos(rot), sin: -Math.sin(rot), struct: s }
-      : { x, z, r: S.r, struct: s };
-    this.cols.add(s.col);
+    if (S.snap) {
+      rot = Math.round(rot / (Math.PI / 2)) * (Math.PI / 2);
+      ({ x, z } = snapPos(type, x, z, rot));
+    }
+    if (Math.hypot(x - p.x, z - p.z) > 11) return this.err(p, '너무 멉니다.');
+    const bad = canPlace(type, x, z, rot, this.terrain, this.cols, this.structs.values());
+    if (bad) return this.err(p, bad);
+    const y = baseY(type, x, z, rot, this.terrain, this.cols);
+    const s = { id: ++this.seq.struct, type, x, z, y, rot, hp: S.hp, maxHp: S.hp, by: p.nid, lv: type === 'workbench' ? 1 : 0, open: false };
+    s.col = structCollider(type, x, z, rot, y);
+    if (s.col) {
+      s.col.struct = s;
+      this.cols.add(s.col);
+    }
     this.structs.set(s.id, s);
-    if (s.type === 'campfire') this.campfires.push(s);
+    if (type === 'campfire') this.campfires.push(s);
     p.inv[item]--;
     this.sendInv(p);
     this.emit('sadd', { s: this.structPayload(s), by: p.nid });
@@ -529,25 +556,9 @@ export class Game {
     this.emit('eat', { n: p.nid });
   }
 
-  onShoot(p, m) {
-    if (!p.alive || p.item !== 'bow' || !(p.inv.bow > 0) || !(p.inv.arrow > 0)) return;
-    if (this.time - p.lastShot < ITEMS.bow.swing * 0.75) return;
-    const d = vec3(m && m.d);
-    if (!d) return;
-    const len = Math.hypot(d[0], d[1], d[2]) || 1;
-    p.lastShot = this.time;
-    p.inv.arrow--;
-    this.sendInv(p);
-    const ox = p.x + (d[0] / len) * 0.6, oy = p.y + PLAYER.eye + (d[1] / len) * 0.6, oz = p.z + (d[2] / len) * 0.6;
-    this.projectiles.push({
-      id: ++this.seq.proj, kind: 0, owner: 'p', src: p, x: ox, y: oy, z: oz,
-      vx: (d[0] / len) * 55, vy: (d[1] / len) * 55, vz: (d[2] / len) * 55, g: 8, dmg: ITEMS.bow.dmg, life: 3, r: 0.4,
-    });
-    this.emit('pshot', { n: p.nid });
-  }
-
+  // 상자 값 — 열린 상자가 늘수록 비싸진다
   chestPrice(c) {
-    const C = CHEST[c.kind];
+    const C = CHEST[c.kind === 'gold' ? 'gold' : 'normal'];
     return C.base + C.step * this.chestsOpened;
   }
 
@@ -1039,6 +1050,22 @@ export class Game {
     });
   }
 
+  // 가시 함정 — 위에 있는 적에게 0.5초마다 피해
+  updateTraps(dt) {
+    this.trapT = (this.trapT || 0) - dt;
+    if (this.trapT > 0) return;
+    this.trapT = 0.5;
+    for (const s of this.structs.values()) {
+      if (!STRUCTS[s.type].trap) continue;
+      for (const e of this.enemies.values()) {
+        if (ENEMIES[e.type].passive || Math.abs(e.x - s.x) > 1.25 + e.radius || Math.abs(e.z - s.z) > 1.25 + e.radius) continue;
+        this.hitEnemy(e, ENEMIES[e.type].boss ? 6 : 11, null);
+        this.damageStruct(s, 4);
+        if (!this.structs.has(s.id)) break;
+      }
+    }
+  }
+
   tick() {
     const now = Date.now();
     const dt = Math.min(0.1, (now - this.last) / 1000);
@@ -1049,6 +1076,7 @@ export class Game {
       this.updatePlayers(dt);
       this.updateSpawns(dt);
       this.updateEnemies(dt);
+      this.updateTraps(dt);
       this.updateProjectiles(dt);
       this.updateDrops(dt);
       this.nodeT -= dt;
